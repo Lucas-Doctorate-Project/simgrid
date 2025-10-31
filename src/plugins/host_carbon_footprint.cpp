@@ -31,12 +31,15 @@ To activate this plugin, first call :cpp:func:`sg_host_carbon_footprint_plugin_i
 to retrieve the total CO₂ emissions of a given host.
 
 The carbon footprint is calculated dynamically during the simulation, taking into account the energy consumed by the host over time and the carbon
-emission rate (in grams per kWh). The emission rate can be configured for each host using :cpp:func:`sg_host_set_carbon_intensity()`.
+emission grid. 
+The carbon emission mix is defined as a vector, where each entry contains the carbon consumed to generate energy for a specific source (like coal, natural gas, or renewables), 
+in kilograms of CO₂ per kWh, and the percentage that each source contributes to the overall energy mix.
+The emission rate can be configured for each host using :cpp:func:`sg_host_set_carbon_intensity()`.
 
 As a result, the carbon footprint model requires the following parameters:
 
   - **Energy consumption**: The energy consumed by the host, which is calculated by the energy plugin based on the host's power profile and activity.
-  - **Carbon emission rate**: The amount of CO₂ emitted (in grams per kWh) of energy consumed, which can vary depending on the location of the host.
+  - **Carbon emission mix**: The amount of CO₂ consumed (in kilograms per kWh) of energy generated, and the percentage that each source contributes to the overall energy mix.
 
 Here is an example of XML declaration:
 
@@ -79,6 +82,7 @@ public:
   double getHostCarbonIntensity();
   double get_last_update_time() const { return last_updated; }
   void setHostCarbonIntensity(double carbon_intensity);
+  void setHostCarbonEmissionMix(const std::map<std::string, std::pair<double, double>>& mix);
   void update();
 
 private:
@@ -86,6 +90,7 @@ private:
 
   double total_carbon_footprint = 0.0; /*< Total CO2 emitted by the host */ 
   double carbon_intensity = 0.0; /*< Grams of CO2 emitted per kWh consumed by the host */
+  std::map<std::string, std::pair<double, double>> carbon_emission_mix; /*< Carbon emission mix of the host (source -> (kgCO2/kWh, percentage)) */
   double last_updated = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
 
 public: 
@@ -96,36 +101,37 @@ simgrid::xbt::Extension<simgrid::s4u::Host, HostCarbonFootprint> HostCarbonFootp
 
 void HostCarbonFootprint::update()
 {
-  double start_time = last_updated;
+  double start_time = this->last_updated;
   double finish_time = simgrid::s4u::Engine::get_clock();
 
-  if (start_time < finish_time) {
-
-    double previous_carbon_footprint = total_carbon_footprint;
-
-    double instantaneous_power_consumption = sg_host_get_current_consumption(host_);
-   
-    double energy_this_step = instantaneous_power_consumption * (finish_time - start_time);
-
-    double energy_this_step_kwh = energy_this_step / 3.6e6;
-
-    double carbon_this_step = energy_this_step_kwh * this->carbon_intensity;
-
-    total_carbon_footprint = previous_carbon_footprint + carbon_this_step;
-   
-    last_updated = finish_time;
-
-    XBT_DEBUG("[update_carbon_footprint of %s] period=[%.8f-%.8f]; instantaneous power=%.2f W; carbon rate=%.2f g/kWh; "
-              "total carbon footprint before: %.8f g -> added now: %.8f g",
-              host_->get_cname(), start_time, finish_time, instantaneous_power_consumption, carbon_intensity,
-              previous_carbon_footprint, carbon_this_step);
-              
+  if (start_time >= finish_time) {
+    return;
   }
 
+  double instantaneous_power_consumption = sg_host_get_current_consumption(host_);
+  
+  double energy_this_step = instantaneous_power_consumption * (finish_time - start_time);
+  double energy_this_step_kwh = energy_this_step / 3.6e6;
+
+  double carbon_this_step = 0;
+  for (const auto& [source, values] : this->carbon_emission_mix) {
+    double source_kgCO2_per_kWh = values.first;
+    double source_percentage = values.second;
+    carbon_this_step += (source_kgCO2_per_kWh * source_percentage) * energy_this_step_kwh * 1000.0; 
+  }
+  
+  double previous_carbon_footprint = this->total_carbon_footprint;
+  this->total_carbon_footprint = previous_carbon_footprint + carbon_this_step;
+  this->last_updated = finish_time;
+
+  XBT_DEBUG("[update_carbon_footprint of %s] period=[%.8f-%.8f]; instantaneous power=%.2f W; carbon rate=%.2f g/kWh; "
+            "total carbon footprint before: %.8f g -> added now: %.8f g",
+            host_->get_cname(), start_time, finish_time, instantaneous_power_consumption, carbon_intensity,
+            previous_carbon_footprint, carbon_this_step);
+              
 }
 
-HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr)
-{
+HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr) {
   this->last_energy = sg_host_get_consumed_energy(host_);
 
   const char* carbon_intensity_str = host_->get_property("carbon_intensity");
@@ -144,30 +150,34 @@ HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr)
 }
 
 
-double HostCarbonFootprint::getHostCarbonFootprint()
-{
-  if (last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+double HostCarbonFootprint::getHostCarbonFootprint() {
+  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
 
-  return total_carbon_footprint;
+  return this->total_carbon_footprint;
 }
 
-double HostCarbonFootprint::getHostCarbonIntensity()
-{
-  if (last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+double HostCarbonFootprint::getHostCarbonIntensity() {
+  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
 
-  return carbon_intensity;
+  return this->carbon_intensity;
 }
 
-void HostCarbonFootprint::setHostCarbonIntensity(double carbon_intensity)
-{
-  if (last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+void HostCarbonFootprint::setHostCarbonIntensity(double carbon_intensity) {
+  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
 
   this->carbon_intensity = carbon_intensity;
 }
 
+void HostCarbonFootprint::setHostCarbonEmissionMix(const std::map<std::string, std::pair<double, double>>& mix)
+{
+  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+    simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
+
+  this->carbon_emission_mix = mix;
+}
 
 HostCarbonFootprint::~HostCarbonFootprint() = default;
 
