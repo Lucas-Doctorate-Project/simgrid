@@ -18,6 +18,7 @@
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <iomanip>
 
 
 SIMGRID_REGISTER_PLUGIN(host_carbon_footprint, "Host carbon footprint", &sg_host_carbon_footprint_plugin_init)
@@ -75,32 +76,69 @@ class HostCarbonFootprint {
 public:
   static simgrid::xbt::Extension<simgrid::s4u::Host, HostCarbonFootprint> EXTENSION_ID;
 
+  double last_energy;  /*< Amount of energy used so far (kwh) >*/
+
   explicit HostCarbonFootprint(simgrid::s4u::Host *ptr);
   ~HostCarbonFootprint(); 
 
   double getHostCarbonFootprint();
-  double getHostCarbonIntensity();
   double get_last_update_time() const { return last_updated; }
-  void setHostCarbonIntensity(double carbon_intensity);
   void setHostCarbonEmissionMix(const std::map<std::string, std::pair<double, double>>& mix);
+  std::string getHostCarbonEmissionMixFormatted();
   void update();
 
 private:
   simgrid::s4u::Host* host_ = nullptr;
 
   double total_carbon_footprint = 0.0; /*< Total CO2 emitted by the host */ 
-  double carbon_intensity = 0.0; /*< Grams of CO2 emitted per kWh consumed by the host */
   std::map<std::string, std::pair<double, double>> carbon_emission_mix; /*< Carbon emission mix of the host (source -> (kgCO2/kWh, percentage)) */
+  const std::map<std::string, std::pair<double, double>> default_carbon_emission_mix = {{"Placeholder", std::make_pair(0.0, 100.0)}}; /*< Default carbon emission mix if none is provided */
   double last_updated = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
 
-public: 
-  double last_energy;  /*< Amount of energy used so far (kwh) >*/
+
+  std::map<std::string, std::pair<double, double>> parse_carbon_mix(const std::string& carbon_mix_input) {
+    std::map<std::string, std::pair<double, double>> carbon_emission_map;
+
+    std::stringstream input_stream(carbon_mix_input);
+    std::string entry;
+
+    double total_percentage = 0.0;
+    while (std::getline(input_stream, entry, ';')) {
+        std::stringstream entry_stream(entry);
+        std::string source_name, values_section;
+
+        if (std::getline(entry_stream, source_name, ':') && std::getline(entry_stream, values_section)) {
+            std::stringstream values_stream(values_section);
+            double emission = 0.0;
+            double percentage = 0.0;
+
+            if (values_stream >> emission >> percentage) {
+                carbon_emission_map[source_name] = std::make_pair(emission, percentage);
+                total_percentage += percentage;
+            } else {
+                XBT_WARN("Warning: Malformed values for %s: '%s'. Using default emission mix.", source_name.c_str(), values_section.c_str());
+                return this->default_carbon_emission_mix;
+            }
+
+        } else {
+            XBT_WARN("Warning: Malformed entry: '%s'. Using default emission mix.", entry.c_str());
+            return this->default_carbon_emission_mix;
+        }
+    }
+
+    if (total_percentage != 100.0) {
+        XBT_WARN("Warning: Total percentage of carbon mix is %.2f, expected 100.0. Using default emission mix.", total_percentage);
+        return this->default_carbon_emission_mix;
+    }
+
+    return carbon_emission_map;
+  }
+
 };
 
 simgrid::xbt::Extension<simgrid::s4u::Host, HostCarbonFootprint> HostCarbonFootprint::EXTENSION_ID;
 
-void HostCarbonFootprint::update()
-{
+void HostCarbonFootprint::update() {
   double start_time = this->last_updated;
   double finish_time = simgrid::s4u::Engine::get_clock();
 
@@ -124,29 +162,25 @@ void HostCarbonFootprint::update()
   this->total_carbon_footprint = previous_carbon_footprint + carbon_this_step;
   this->last_updated = finish_time;
 
-  XBT_DEBUG("[update_carbon_footprint of %s] period=[%.8f-%.8f]; instantaneous power=%.2f W; carbon rate=%.2f g/kWh; "
+  XBT_DEBUG("[update_carbon_footprint of %s] period=[%.8f-%.8f]; instantaneous power=%.2f W;"
             "total carbon footprint before: %.8f g -> added now: %.8f g",
-            host_->get_cname(), start_time, finish_time, instantaneous_power_consumption, carbon_intensity,
+            host_->get_cname(), start_time, finish_time, instantaneous_power_consumption, 
             previous_carbon_footprint, carbon_this_step);
-              
 }
 
 HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr) {
   this->last_energy = sg_host_get_consumed_energy(host_);
 
-  const char* carbon_intensity_str = host_->get_property("carbon_intensity");
-  if (carbon_intensity_str != nullptr) {
-    try {
-      this->carbon_intensity = std::stod(carbon_intensity_str); 
-    } catch (const std::invalid_argument&) {
-      XBT_WARN("Invalid carbon_intensity value for host %s. Using default value: %f g/kWh.", host_->get_cname(), this->carbon_intensity);
-    }
+  const char* raw_carbon_mix = host_->get_property("carbon_emission_mix");
+  if (raw_carbon_mix != nullptr) {
+    std::string carbon_mix_str(raw_carbon_mix);
+    this->carbon_emission_mix = parse_carbon_mix(carbon_mix_str);
   } else {
-    XBT_WARN("Host '%s': Missing value for property 'carbon_intensity', using default value (%.2f).", host_->get_cname(), this->carbon_intensity);
+    XBT_WARN("Host '%s': Missing value for property 'carbon_emission_mix', using default map.", host_->get_cname());
+    this->carbon_emission_mix = this->default_carbon_emission_mix; // Default to 0 g/kWh if not provided
   }
 
-  XBT_DEBUG("Creating HostCarbonFootprint for host %s with carbon rate: %f.", host_->get_cname(), this->carbon_intensity);
-
+  XBT_DEBUG("Creating HostCarbonFootprint for host %s with the following carbon emission mix configuration: \n%s.", host_->get_cname(), this->getHostCarbonEmissionMixFormatted().c_str());
 }
 
 
@@ -157,26 +191,28 @@ double HostCarbonFootprint::getHostCarbonFootprint() {
   return this->total_carbon_footprint;
 }
 
-double HostCarbonFootprint::getHostCarbonIntensity() {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
-
-  return this->carbon_intensity;
-}
-
-void HostCarbonFootprint::setHostCarbonIntensity(double carbon_intensity) {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
-
-  this->carbon_intensity = carbon_intensity;
-}
-
 void HostCarbonFootprint::setHostCarbonEmissionMix(const std::map<std::string, std::pair<double, double>>& mix)
 {
   if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
 
   this->carbon_emission_mix = mix;
+}
+
+std::string HostCarbonFootprint::getHostCarbonEmissionMixFormatted() {
+  std::stringstream ss;  
+  
+  ss << std::fixed << std::setprecision(2);
+
+    for (const auto& entry : this->carbon_emission_mix) {
+        const std::string& source_name = entry.first;
+        double emission                 = entry.second.first;
+        double percentage               = entry.second.second;
+
+        ss << source_name << ": "<< emission << " kgCO2/kWh (" << percentage << "%)" << "\n"; 
+    }
+
+    return ss.str();
 }
 
 HostCarbonFootprint::~HostCarbonFootprint() = default;
@@ -290,18 +326,4 @@ double sg_host_get_carbon_footprint(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostCarbonFootprint>()->getHostCarbonFootprint();
-}
-
-double sg_host_get_carbon_intensity(const_sg_host_t host)
-{
-  ensure_plugin_inited();
-  return host->extension<HostCarbonFootprint>()->getHostCarbonIntensity();
-  
-}
-
-void sg_host_set_carbon_intensity(const_sg_host_t host, double carbon_intensity)
-{
-  ensure_plugin_inited();
-  host->extension<HostCarbonFootprint>()->setHostCarbonIntensity(carbon_intensity);
-
 }
