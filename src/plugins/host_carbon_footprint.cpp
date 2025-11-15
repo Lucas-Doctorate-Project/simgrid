@@ -96,7 +96,8 @@ private:
   double last_updated = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
 
 
-  std::map<std::string, std::pair<double, double>> parse_carbon_mix(const std::string& carbon_mix_input) {
+  std::map<std::string, std::pair<double, double>> parse_carbon_mix(const std::string& carbon_mix_input) 
+  {
     std::map<std::string, std::pair<double, double>> carbon_emission_map;
 
     std::stringstream input_stream(carbon_mix_input);
@@ -138,7 +139,8 @@ private:
 
 simgrid::xbt::Extension<simgrid::s4u::Host, HostCarbonFootprint> HostCarbonFootprint::EXTENSION_ID;
 
-void HostCarbonFootprint::update() {
+void HostCarbonFootprint::update() 
+{
   double start_time = this->last_updated;
   double finish_time = simgrid::s4u::Engine::get_clock();
 
@@ -168,7 +170,8 @@ void HostCarbonFootprint::update() {
             previous_carbon_footprint, carbon_this_step);
 }
 
-HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr) {
+HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr) 
+{
   this->last_energy = sg_host_get_consumed_energy(host_);
 
   const char* raw_carbon_mix = host_->get_property("carbon_emission_mix");
@@ -184,7 +187,8 @@ HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr) {
 }
 
 
-double HostCarbonFootprint::getHostCarbonFootprint() {
+double HostCarbonFootprint::getHostCarbonFootprint() 
+{
   if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostCarbonFootprint::update, this));
 
@@ -199,7 +203,8 @@ void HostCarbonFootprint::setHostCarbonEmissionMix(const std::map<std::string, s
   this->carbon_emission_mix = mix;
 }
 
-std::string HostCarbonFootprint::getHostCarbonEmissionMixFormatted() {
+std::string HostCarbonFootprint::getHostCarbonEmissionMixFormatted() 
+{
   std::stringstream ss;  
   
   ss << std::fixed << std::setprecision(2);
