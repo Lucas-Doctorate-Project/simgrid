@@ -14,6 +14,8 @@ SG_BEGIN_DECL
 
 XBT_PUBLIC void sg_host_carbon_footprint_plugin_init();
 XBT_PUBLIC double sg_host_get_carbon_footprint(const_sg_host_t host);
+XBT_PUBLIC void sg_host_set_carbon_emission_mix(const_sg_host_t host, const std::map<std::string, std::pair<double, double>>& mix);
+XBT_PUBLIC std::string sg_host_get_carbon_emission_mix_formatted(const_sg_host_t host);
 
 SG_END_DECL
 

@@ -332,3 +332,15 @@ double sg_host_get_carbon_footprint(const_sg_host_t host)
   ensure_plugin_inited();
   return host->extension<HostCarbonFootprint>()->getHostCarbonFootprint();
 }
+
+void sg_host_set_carbon_emission_mix(const_sg_host_t host, const std::map<std::string, std::pair<double, double>>& mix)
+{
+  ensure_plugin_inited();
+  host->extension<HostCarbonFootprint>()->setHostCarbonEmissionMix(mix);
+}
+
+std::string sg_host_get_carbon_emission_mix_formatted(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostCarbonFootprint>()->getHostCarbonEmissionMixFormatted();
+}
