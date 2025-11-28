@@ -10,6 +10,10 @@
 #include <simgrid/forward.h>
 #include <xbt/base.h>
 
+#include <map>
+#include <string>
+#include <utility>
+
 SG_BEGIN_DECL
 
 XBT_PUBLIC void sg_host_carbon_footprint_plugin_init();
