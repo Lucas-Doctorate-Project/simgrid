@@ -5,38 +5,42 @@
     <host core="4" id="host_br_static_co2" pstate="0" speed="100.0Mf">
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_intensity" value="91.48" />
+      <prop id="carbon_emission_mix" value="Hydro:24 78.19;Solar:45 7.37;Wind: 11 5.46;Gas:490 6;Oil:650 2.43;Imported:225 0.55" />
+      <!-- <# 17/11/2025, completing in imported - 69.1152gCO2 #> -->
     </host>
 
     <host core="4" id="host_fr_static_co2" pstate="0" speed="100.0Mf">      
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_intensity" value="33.45" />
+      <prop id="carbon_emission_mix" value="Nuclear:5 73.47;Wind:13 9.13;Hydro:11 10.11;Solar:30 2.65;Gas:512 2.6;Biomass:230 1.55;Oil:901 0.1;Coal:983 0.39" />
+      <!-- 17/11/2025, completed with nuclear - 28.3792gCO2 -->
     </host>
 
     <host core="4" id="host_usa_static_co2" pstate="0" speed="100.0Mf">      
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
       <prop id="carbon_intensity" value="403.65" />
+      <prop id="carbon_emission_mix" value="Hydro:24 1.44;Wind:11 3.99;Solar:27 3.06;Nuclear:12 34.03;Coal:1057 15.39;Gas:515 41.39;Oil:1214 0.7" />
+      <!-- PJM - 17/11/2025, completed unknown in gas and rest in nuclear - 390.0231gCO2 -->
     </host>
 
-    <host core="4" id="host_br_dynamic_co2" pstate="0" speed="100.0Mf">
+    <!-- <host core="4" id="host_br_dynamic_co2" pstate="0" speed="100.0Mf">
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_intensity" value="91.48" />
+      <prop id="carbon_intensity" value="Hydro:24 73.63;Solar:45 10.97;Wind: 11 3.36;Gas:490 7.2;Oil: 650 3.67" />
     </host>
 
     <host core="4" id="host_fr_dynamic_co2" pstate="0" speed="100.0Mf">      
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_intensity" value="33.45" />
+      <prop id="carbon_emission_mix" value="Nuclear:5 75.61;Wind:13 5.26;Hydro:11 10.42;Solar:30 2.34;Gas:512 2.41;Biomass:230 1.8" />
     </host>
 
     <host core="4" id="host_usa_dynamic_co2" pstate="0" speed="100.0Mf">      
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_intensity" value="403.65" />
-    </host>
+      <prop id="carbon_emission_mix" value="Hydro:30 0.9;27 3.1;Wind:11 9.11;Nuclear:12 35.29;1057 13.44;Gas:515 33.64;Oil:1212 1.85" />
+    </host> -->
 
   </zone>
 

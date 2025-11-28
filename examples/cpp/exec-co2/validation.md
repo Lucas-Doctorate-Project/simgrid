@@ -43,25 +43,25 @@ All scenarios use a **10‑hour time horizon**.
 
 # 1. Static CO₂ Scenarios
 
-## 1.1 Machine Off (USA grid, carbon intensity = 403.65 gCO2/kWh)
+## 1.1 Machine Off (USA grid, carbon intensity = 390.0231 gCO2/kWh)
 
 - E_J = 5 W  (power when off) * 3600 (seconds in one hour) * 10 (hours in the time horizon) = 180000  J
 - E_kWh = 180000 / 3600000 = 0.05 kWh
 
-- **Expected emissions:**  0.05 * 403.65 = **20.1825 g** CO2
+- **Expected emissions:**  0.05 * 390.0231 = **19.501155 g** CO2
 
 ---
 
-## 1.2 Machine Idle (France grid, carbon intensity = 33.45 gCO2/kWh
+## 1.2 Machine Idle (France grid, carbon intensity = 28.3792 gCO2/kWh)
 
 - Power idle = 100 W
 - E_J = 100 * 3600 * 10 = 3600000 J
 - E_kWh = 1.0 kWh
-- **Expected emissions:** 1.0 * 33.45 = **33.45 gCO2**
+- **Expected emissions:** 1.0 * 28.3792 = **28.3792 gCO2**
 
 ---
 
-## 1.3 Machine Running Tasks (Brazil grid, carbon intensity = 91.48 gCO2/kWh)
+## 1.3 Machine Running Tasks (Brazil grid, carbon intensity = 69.1152 gCO2/kWh)
 
 We evaluate running tasks using all the cores in the machine in the following 4 scenarios:
 - A : running computations using 1 CPU core for 1 hour
@@ -71,11 +71,11 @@ We evaluate running tasks using all the cores in the machine in the following 4 
 
 | Scenarios | Cores | Power (W) | Duration (h) | Energy (kWh) | CO₂ (g) |
 |---------|-------|-----------|--------------|--------------|---------|
-| A       | 1     | 125       | 1            | 0.125        | 11.435  |
-| B       | 2     | 150       | 2            | 0.300        | 27.444  |
-| C       | 3     | 175       | 3            | 0.525        | 48.027  |
-| D       | 4     | 200       | 4            | 0.800        | 73.184  |
-| **Total** | —   | —         | 10           | **1.750**    | **160.09** |
+| A       | 1     | 125       | 1            | 0.125        | 8.6394  |
+| B       | 2     | 150       | 2            | 0.300        | 20.73456  |
+| C       | 3     | 175       | 3            | 0.525        | 36.28548  |
+| D       | 4     | 200       | 4            | 0.800        | 55.29216  |
+| **Total** | —   | —         | 10           | **1.750**    | **120.9516** |
 
 
 ---

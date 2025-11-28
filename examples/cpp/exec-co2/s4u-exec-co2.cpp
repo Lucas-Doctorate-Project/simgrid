@@ -15,16 +15,17 @@ void turn_host_off(simgrid::s4u::Host * host)
 {
   host->turn_off();
 }
-void update_co2_actor(simgrid::s4u::Host* host, std::map<int, double > co2_data)
-{  
-  for (auto it = co2_data.begin(); it != co2_data.end(); it++)
-  {
-    int time = it->first;
-    double co2_data = it->second;
-    simgrid::s4u::this_actor::sleep_until(time);
-    sg_host_set_carbon_intensity(host,co2_data);    
-  }      
-}
+
+// void update_co2_actor(simgrid::s4u::Host* host, std::map<int, double > co2_data)
+// {  
+//   for (auto it = co2_data.begin(); it != co2_data.end(); it++)
+//   {
+//     int time = it->first;
+//     double co2_data = it->second;
+//     simgrid::s4u::this_actor::sleep_until(time);
+//     sg_host_set_carbon_intensity(host,co2_data);    
+//   }      
+// }
 
 void test_execution()
 {          
@@ -77,15 +78,10 @@ void test_execution()
     activity_4_2->wait();
     activity_4_3->wait();
     activity_4_4->wait();
-
-    
- 
 }
 
 int main(int argc, char* argv[])
 {
-
-
   // Dict values for grid CO2 of each scenario, key is the time, and value is the carbon emissions (in g CO2/kWh)
   std::map<int, double > brazil_grid_co2;
   std::map<int, double> france_grid_co2;
@@ -96,41 +92,41 @@ int main(int argc, char* argv[])
   // Grid electricity emissions values
 
   // For Brazil    
-  brazil_grid_co2[0] = 100.07;  
-  brazil_grid_co2[seconds_in_hour*1] = 93.6;
-  brazil_grid_co2[seconds_in_hour*2] = 93.89;
-  brazil_grid_co2[seconds_in_hour*3] = 96.04;
-  brazil_grid_co2[seconds_in_hour*4] = 95.0;
-  brazil_grid_co2[seconds_in_hour*5] = 94.4;
-  brazil_grid_co2[seconds_in_hour*6] = 94.11;
-  brazil_grid_co2[seconds_in_hour*7] = 94.99;
-  brazil_grid_co2[seconds_in_hour*8] = 96.44;
-  brazil_grid_co2[seconds_in_hour*9] = 99.76;
+  // brazil_grid_co2[0] = 100.07;  
+  // brazil_grid_co2[seconds_in_hour*1] = 93.6;
+  // brazil_grid_co2[seconds_in_hour*2] = 93.89;
+  // brazil_grid_co2[seconds_in_hour*3] = 96.04;
+  // brazil_grid_co2[seconds_in_hour*4] = 95.0;
+  // brazil_grid_co2[seconds_in_hour*5] = 94.4;
+  // brazil_grid_co2[seconds_in_hour*6] = 94.11;
+  // brazil_grid_co2[seconds_in_hour*7] = 94.99;
+  // brazil_grid_co2[seconds_in_hour*8] = 96.44;
+  // brazil_grid_co2[seconds_in_hour*9] = 99.76;
 
 
   // For France
-  france_grid_co2[0] = 29.09;
-  france_grid_co2[seconds_in_hour*1] = 30.08;
-  france_grid_co2[seconds_in_hour*2] = 32.33;
-  france_grid_co2[seconds_in_hour*3] = 32.96;
-  france_grid_co2[seconds_in_hour*4] = 33.0;
-  france_grid_co2[seconds_in_hour*5] = 33.41;
-  france_grid_co2[seconds_in_hour*6] = 34.52;
-  france_grid_co2[seconds_in_hour*7] = 33.63;
-  france_grid_co2[seconds_in_hour*8] = 32.17;
-  france_grid_co2[seconds_in_hour*9] = 31.95;
+  // france_grid_co2[0] = 29.09;
+  // france_grid_co2[seconds_in_hour*1] = 30.08;
+  // france_grid_co2[seconds_in_hour*2] = 32.33;
+  // france_grid_co2[seconds_in_hour*3] = 32.96;
+  // france_grid_co2[seconds_in_hour*4] = 33.0;
+  // france_grid_co2[seconds_in_hour*5] = 33.41;
+  // france_grid_co2[seconds_in_hour*6] = 34.52;
+  // france_grid_co2[seconds_in_hour*7] = 33.63;
+  // france_grid_co2[seconds_in_hour*8] = 32.17;
+  // france_grid_co2[seconds_in_hour*9] = 31.95;
 
   // For USA
-  usa_grid_co2[0] = 453.54;
-  usa_grid_co2[seconds_in_hour*1] = 441.48;
-  usa_grid_co2[seconds_in_hour*2] = 437.93;
-  usa_grid_co2[seconds_in_hour*3] = 437.61;
-  usa_grid_co2[seconds_in_hour*4] = 442.29;
-  usa_grid_co2[seconds_in_hour*5] = 447.18;
-  usa_grid_co2[seconds_in_hour*6] = 452.04;
-  usa_grid_co2[seconds_in_hour*7] = 453.96;
-  usa_grid_co2[seconds_in_hour*8] = 455.13;
-  usa_grid_co2[seconds_in_hour*9] = 457.54;
+  // usa_grid_co2[0] = 453.54;
+  // usa_grid_co2[seconds_in_hour*1] = 441.48;
+  // usa_grid_co2[seconds_in_hour*2] = 437.93;
+  // usa_grid_co2[seconds_in_hour*3] = 437.61;
+  // usa_grid_co2[seconds_in_hour*4] = 442.29;
+  // usa_grid_co2[seconds_in_hour*5] = 447.18;
+  // usa_grid_co2[seconds_in_hour*6] = 452.04;
+  // usa_grid_co2[seconds_in_hour*7] = 453.96;
+  // usa_grid_co2[seconds_in_hour*8] = 455.13;
+  // usa_grid_co2[seconds_in_hour*9] = 457.54;
 
   sg_host_energy_plugin_init();              
   sg_host_carbon_footprint_plugin_init();
@@ -142,24 +138,21 @@ int main(int argc, char* argv[])
   sg4::Host* host_fr_static_co2 = sg4::Host::by_name("host_fr_static_co2");
   sg4::Host* host_usa_static_co2 = sg4::Host::by_name("host_usa_static_co2"); 
 
-  sg4::Host* host_br_dynamic_co2 = sg4::Host::by_name("host_br_dynamic_co2");
-  sg4::Host* host_fr_dynamic_co2 = sg4::Host::by_name("host_fr_dynamic_co2");
-  sg4::Host* host_usa_dynamic_co2 = sg4::Host::by_name("host_usa_dynamic_co2");
+  // sg4::Host* host_br_dynamic_co2 = sg4::Host::by_name("host_br_dynamic_co2");
+  // sg4::Host* host_fr_dynamic_co2 = sg4::Host::by_name("host_fr_dynamic_co2");
+  // sg4::Host* host_usa_dynamic_co2 = sg4::Host::by_name("host_usa_dynamic_co2");
 
 
-  sg4::Actor::create("turn_off test", host_br_static_co2, turn_host_off,host_usa_static_co2);
-  sg4::Actor::create("turn_off test", host_br_static_co2, turn_host_off,host_usa_dynamic_co2);
+  sg4::Actor::create("turn_off test", host_br_static_co2, turn_host_off, host_usa_static_co2);
+  // sg4::Actor::create("turn_off test", host_br_static_co2, turn_host_off,host_usa_dynamic_co2);
        
   sg4::Actor::create("execution", host_br_static_co2, test_execution);
-  sg4::Actor::create("execution", host_br_dynamic_co2, test_execution);
+  // sg4::Actor::create("execution", host_br_dynamic_co2, test_execution);
 
-  sg4::Actor::create("update_co2", host_br_static_co2, update_co2_actor,host_usa_dynamic_co2,usa_grid_co2);
-  sg4::Actor::create("update_co2", host_br_static_co2, update_co2_actor,host_fr_dynamic_co2,france_grid_co2);
-  sg4::Actor::create("update_co2", host_br_static_co2, update_co2_actor,host_br_dynamic_co2,brazil_grid_co2);
+  // sg4::Actor::create("update_co2", host_br_static_co2, update_co2_actor,host_usa_dynamic_co2,usa_grid_co2);
+  // sg4::Actor::create("update_co2", host_br_static_co2, update_co2_actor,host_fr_dynamic_co2,france_grid_co2);
+  // sg4::Actor::create("update_co2", host_br_static_co2, update_co2_actor,host_br_dynamic_co2,brazil_grid_co2);
 
   e.run();
-
-
   return 0;
-
 }
