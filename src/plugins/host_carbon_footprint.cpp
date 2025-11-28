@@ -19,6 +19,7 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <iomanip>
+#include <src/simgrid/math_utils.h>
 
 
 SIMGRID_REGISTER_PLUGIN(host_carbon_footprint, "Host carbon footprint", &sg_host_carbon_footprint_plugin_init)
@@ -127,7 +128,7 @@ private:
         }
     }
 
-    if (total_percentage != 100.0) {
+    if (!double_equals(total_percentage, 100.0, 1E-6)) {
         XBT_WARN("Warning: Total percentage of carbon mix is %.2f, expected 100.0. Using default emission mix.", total_percentage);
         return this->default_carbon_emission_mix;
     }
@@ -155,9 +156,9 @@ void HostCarbonFootprint::update()
 
   double carbon_this_step = 0;
   for (const auto& [source, values] : this->carbon_emission_mix) {
-    double source_kgCO2_per_kWh = values.first;
+    double source_gCO2_per_kWh = values.first;
     double source_percentage = values.second;
-    carbon_this_step += (source_kgCO2_per_kWh * source_percentage) * energy_this_step_kwh * 1000.0; 
+    carbon_this_step += ((source_gCO2_per_kWh * source_percentage) * energy_this_step_kwh) / 100.0; 
   }
   
   double previous_carbon_footprint = this->total_carbon_footprint;
