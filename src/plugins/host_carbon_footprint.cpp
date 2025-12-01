@@ -80,7 +80,13 @@ public:
   double last_energy;  /*< Amount of energy used so far (kwh) >*/
 
   explicit HostCarbonFootprint(simgrid::s4u::Host *ptr);
-  ~HostCarbonFootprint(); 
+  ~HostCarbonFootprint();
+  
+  struct EnergySource {
+        double percentage = 0.0; // How much this source contributes to the mix (in %)
+        double carbon_intensity = 0.0; // Grams of CO2 emitted per kWh produced
+        double water_intensity = 0.0; // Liters of water consumed per kWh produced
+    };
 
   double getHostCarbonFootprint();
   double get_last_update_time() const { return last_updated; }
@@ -91,51 +97,64 @@ public:
 private:
   simgrid::s4u::Host* host_ = nullptr;
 
-  double total_carbon_footprint = 0.0; /*< Total CO2 emitted by the host */ 
+  double total_carbon_footprint = 0.0; /* Total CO2 emitted to produce the energy used by the host */ 
+  double total_water_footprint = 0.0; /* Total water used to produce the energy used by the host */
+  std::map<std::string, HostCarbonFootprint::EnergySource> energy_mix; /*< Energy sources making up the carbon emission mix */
+  const std::map<std::string, HostCarbonFootprint::EnergySource> default_energy_mix = {{"Placeholder", EnergySource{100.0, 0.0, 0.0}}}; /*< Default energy mix if none is provided */
   std::map<std::string, std::pair<double, double>> carbon_emission_mix; /*< Carbon emission mix of the host (source -> (kgCO2/kWh, percentage)) */
   const std::map<std::string, std::pair<double, double>> default_carbon_emission_mix = {{"Placeholder", std::make_pair(0.0, 100.0)}}; /*< Default carbon emission mix if none is provided */
   double last_updated = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
 
-
-  std::map<std::string, std::pair<double, double>> parse_carbon_mix(const std::string& carbon_mix_input) 
+  void parse_mix_input_string(const std::string& mix_input, bool is_carbon_mix) 
   {
-    std::map<std::string, std::pair<double, double>> carbon_emission_map;
-
-    std::stringstream input_stream(carbon_mix_input);
+    std::stringstream input_stream(mix_input);
     std::string entry;
 
-    double total_percentage = 0.0;
     while (std::getline(input_stream, entry, ';')) {
-        std::stringstream entry_stream(entry);
-        std::string source_name, values_section;
+      std::stringstream entry_stream(entry);
+      std::string source_name, values_section;
 
-        if (std::getline(entry_stream, source_name, ':') && std::getline(entry_stream, values_section)) {
-            std::stringstream values_stream(values_section);
-            double emission = 0.0;
-            double percentage = 0.0;
+      if (std::getline(entry_stream, source_name, ':') && std::getline(entry_stream, values_section)) {
+        std::stringstream values_stream(values_section);
+        double intensity = 0.0, percentage = 0.0;
 
-            if (values_stream >> emission >> percentage) {
-                carbon_emission_map[source_name] = std::make_pair(emission, percentage);
-                total_percentage += percentage;
-            } else {
-                XBT_WARN("Warning: Malformed values for %s: '%s'. Using default emission mix.", source_name.c_str(), values_section.c_str());
-                return this->default_carbon_emission_mix;
-            }
+        if (values_stream >> intensity >> percentage) {
+          auto it = this->energy_mix.find(source_name);
+          if (it == this->energy_mix.end()) {
+            EnergySource new_source;
+            new_source.percentage = percentage;
+            this->energy_mix[source_name] = new_source;
+          } else {
+            EnergySource& existing_source_info = it->second;
+            
+            if (!double_equals(existing_source_info.percentage, percentage, 1E-9)) 
+              XBT_WARN("Warning: Consistency Error on host '%s' for source '%s': "
+                        "Carbon mix says %.2f%% but Water mix says %.2f%%. Using first defined.",
+                        host_->get_cname(), source_name.c_str(), existing_source_info.percentage, percentage);
+          }
 
+          if (is_carbon_mix) this->energy_mix[source_name].carbon_intensity = intensity;
+          else this->energy_mix[source_name].water_intensity = intensity;
         } else {
-            XBT_WARN("Warning: Malformed entry: '%s'. Using default emission mix.", entry.c_str());
-            return this->default_carbon_emission_mix;
+          XBT_WARN("Warning: Malformed values for %s: '%s'. Using default emission mix.", source_name.c_str(), values_section.c_str());
+          this->energy_mix = this->default_energy_mix;
         }
+      }
     }
-
-    if (!double_equals(total_percentage, 100.0, 1E-6)) {
-        XBT_WARN("Warning: Total percentage of carbon mix is %.2f, expected 100.0. Using default emission mix.", total_percentage);
-        return this->default_carbon_emission_mix;
-    }
-
-    return carbon_emission_map;
   }
 
+  void validate_energy_mix_composition()
+  {
+    double total = 0.0;
+    for (const auto& [source_name, source_info] : this->energy_mix) {
+      total += source_info.percentage;
+    }
+
+    if (total > 0 && !double_equals(total, 100.0, 1E-9)) {
+        XBT_WARN("Host '%s' eco mix sums to %.2f%%, not 100%%. Using default emission mix.", host_->get_cname(), total);
+        this->energy_mix = this->default_energy_mix;
+    }
+  }
 };
 
 simgrid::xbt::Extension<simgrid::s4u::Host, HostCarbonFootprint> HostCarbonFootprint::EXTENSION_ID;
@@ -154,21 +173,24 @@ void HostCarbonFootprint::update()
   double energy_this_step = instantaneous_power_consumption * (finish_time - start_time);
   double energy_this_step_kwh = energy_this_step / 3.6e6;
 
-  double carbon_this_step = 0;
-  for (const auto& [source, values] : this->carbon_emission_mix) {
-    double source_gCO2_per_kWh = values.first;
-    double source_percentage = values.second;
-    carbon_this_step += ((source_gCO2_per_kWh * source_percentage) * energy_this_step_kwh) / 100.0; 
+  double carbon_this_step = 0, water_this_step = 0;
+  for (const auto& [source_name, source_info] : this->energy_mix) {
+    carbon_this_step += ((source_info.carbon_intensity * source_info.percentage) * energy_this_step_kwh) / 100.0;
+    water_this_step += ((source_info.water_intensity * source_info.percentage) * energy_this_step_kwh) / 100.0; 
   }
   
   double previous_carbon_footprint = this->total_carbon_footprint;
+  double previous_water_footprint = this->total_water_footprint;
   this->total_carbon_footprint = previous_carbon_footprint + carbon_this_step;
+  this->total_water_footprint = previous_water_footprint + water_this_step;
+
   this->last_updated = finish_time;
 
   XBT_DEBUG("[update_carbon_footprint of %s] period=[%.8f-%.8f]; instantaneous power=%.2f W;"
-            "total carbon footprint before: %.8f g -> added now: %.8f g",
+            "total carbon footprint before: %.8f g -> added now: %.8f g;"
+            "total water footprint before: %.8f L -> added now: %.8f g",
             host_->get_cname(), start_time, finish_time, instantaneous_power_consumption, 
-            previous_carbon_footprint, carbon_this_step);
+            previous_carbon_footprint, carbon_this_step, previous_water_footprint, water_this_step);
 }
 
 HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr) 
@@ -176,12 +198,23 @@ HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr)
   this->last_energy = sg_host_get_consumed_energy(host_);
 
   const char* raw_carbon_mix = host_->get_property("carbon_emission_mix");
-  if (raw_carbon_mix != nullptr) {
-    std::string carbon_mix_str(raw_carbon_mix);
-    this->carbon_emission_mix = parse_carbon_mix(carbon_mix_str);
+  const char* raw_water_mix = host_->get_property("water_emission_mix");
+
+  if (raw_carbon_mix == nullptr && raw_water_mix == nullptr) {
+    XBT_WARN("Host '%s': Missing values for properties 'carbon_emission_mix' and 'water_emission_mix', using default null emission mix.", host_->get_cname());
+    this->energy_mix = this->default_energy_mix; // Default to 0 g/kWh and 0 L/kWh if not provided
   } else {
-    XBT_WARN("Host '%s': Missing value for property 'carbon_emission_mix', using default map.", host_->get_cname());
-    this->carbon_emission_mix = this->default_carbon_emission_mix; // Default to 0 g/kWh if not provided
+    if (raw_carbon_mix != nullptr) {
+      std::string carbon_mix_str(raw_carbon_mix);
+      this->parse_mix_input_string(carbon_mix_str, true);
+    }
+
+    if (raw_water_mix != nullptr) {
+      std::string water_mix_str(raw_water_mix);
+      this->parse_mix_input_string(water_mix_str, false);
+    }
+
+    this->validate_energy_mix_composition();
   }
 
   XBT_DEBUG("Creating HostCarbonFootprint for host %s with the following carbon emission mix configuration: \n%s.", host_->get_cname(), this->getHostCarbonEmissionMixFormatted().c_str());
