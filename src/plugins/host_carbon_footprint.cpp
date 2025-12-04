@@ -105,41 +105,58 @@ private:
   const std::map<std::string, std::pair<double, double>> default_carbon_emission_mix = {{"Placeholder", std::make_pair(0.0, 100.0)}}; /*< Default carbon emission mix if none is provided */
   double last_updated = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
 
-  void parse_mix_input_string(const std::string& mix_input, bool is_carbon_mix) 
-  {
-    std::stringstream input_stream(mix_input);
-    std::string entry;
+  static std::map<std::string, double> parse_string_into_map(const char* input_cstr) 
+    {
+      std::map<std::string, double> result;
+      if (input_cstr == nullptr) return result;
 
-    while (std::getline(input_stream, entry, ';')) {
-      std::stringstream entry_stream(entry);
-      std::string source_name, values_section;
+      std::string input(input_cstr);
+      std::stringstream input_stream(input);
+      std::string entry;
 
-      if (std::getline(entry_stream, source_name, ':') && std::getline(entry_stream, values_section)) {
-        std::stringstream values_stream(values_section);
-        double intensity = 0.0, percentage = 0.0;
+      while (std::getline(input_stream, entry, ';')) {
+        std::stringstream entry_stream(entry);
+        std::string key;
+        std::string val_str;
 
-        if (values_stream >> intensity >> percentage) {
-          auto it = this->energy_mix.find(source_name);
-          if (it == this->energy_mix.end()) {
-            EnergySource new_source;
-            new_source.percentage = percentage;
-            this->energy_mix[source_name] = new_source;
-          } else {
-            EnergySource& existing_source_info = it->second;
-            
-            if (!double_equals(existing_source_info.percentage, percentage, 1E-9)) 
-              XBT_WARN("Warning: Consistency Error on host '%s' for source '%s': "
-                        "Carbon mix says %.2f%% but Water mix says %.2f%%. Using first defined.",
-                        host_->get_cname(), source_name.c_str(), existing_source_info.percentage, percentage);
+        if (std::getline(entry_stream, key, ':') && std::getline(entry_stream, val_str)) {
+          try {
+            result[key] = std::stod(val_str);
+          } catch (...) {
+            XBT_WARN("Failed to parse value for '%s'.", key.c_str());
           }
-
-          if (is_carbon_mix) this->energy_mix[source_name].carbon_intensity = intensity;
-          else this->energy_mix[source_name].water_intensity = intensity;
-        } else {
-          XBT_WARN("Warning: Malformed values for %s: '%s'. Using default emission mix.", source_name.c_str(), values_section.c_str());
-          this->energy_mix = this->default_energy_mix;
         }
       }
+      return result;
+    }
+
+  void build_energy_mix(const std::map<std::string, double>& energy_percentage_map,
+                        const std::map<std::string, double>& carbon_footprint_map,
+                        const std::map<std::string, double>& water_footprint_map) 
+  {
+    for (const auto& [source_name, percentage] : energy_percentage_map) {
+      double carbon_intensity = 0.0, water_intensity = 0.0;
+
+      auto carbon_it = carbon_footprint_map.find(source_name);
+      if (carbon_it != carbon_footprint_map.end()) {
+        carbon_intensity = carbon_it->second;
+      } else {
+        XBT_WARN("Warning: Missing carbon intensity for source '%s' on host '%s'. Using 0 g/kWh.", source_name.c_str(), host_->get_cname());
+      }
+
+      auto water_it = water_footprint_map.find(source_name);
+      if (water_it != water_footprint_map.end()) {
+        water_intensity = water_it->second;
+      } else {
+        XBT_WARN("Warning: Missing water intensity for source '%s' on host '%s'. Using 0 L/kWh.", source_name.c_str(), host_->get_cname());
+      }
+
+      EnergySource source_info;
+      source_info.percentage = percentage;
+      source_info.carbon_intensity = carbon_intensity;
+      source_info.water_intensity = water_intensity;
+
+      this->energy_mix[source_name] = source_info;
     }
   }
 
@@ -197,23 +214,19 @@ HostCarbonFootprint::HostCarbonFootprint(simgrid::s4u::Host* ptr) : host_(ptr)
 {
   this->last_energy = sg_host_get_consumed_energy(host_);
 
-  const char* raw_carbon_mix = host_->get_property("carbon_emission_mix");
-  const char* raw_water_mix = host_->get_property("water_emission_mix");
+  const char* raw_energy_mix = host_->get_property("energy_mix");
+  const char* raw_carbon_footprint = host_->get_property("carbon_footprint");
+  const char* raw_water_footprint = host_->get_property("water_footprint");
 
-  if (raw_carbon_mix == nullptr && raw_water_mix == nullptr) {
-    XBT_WARN("Host '%s': Missing values for properties 'carbon_emission_mix' and 'water_emission_mix', using default null emission mix.", host_->get_cname());
+  if (raw_carbon_footprint == nullptr && raw_water_footprint == nullptr) {
+    XBT_WARN("Host '%s': Missing values for properties 'carbon_footprint' and 'water_footprint', using default null energy mix.", host_->get_cname());
     this->energy_mix = this->default_energy_mix; // Default to 0 g/kWh and 0 L/kWh if not provided
   } else {
-    if (raw_carbon_mix != nullptr) {
-      std::string carbon_mix_str(raw_carbon_mix);
-      this->parse_mix_input_string(carbon_mix_str, true);
-    }
+    std::map<std::string, double> energy_percentage_map = this->parse_string_into_map(raw_energy_mix);
+    std::map<std::string, double> carbon_footprint_map = this->parse_string_into_map(raw_carbon_footprint);
+    std::map<std::string, double> water_footprint_map = this->parse_string_into_map(raw_water_footprint);
 
-    if (raw_water_mix != nullptr) {
-      std::string water_mix_str(raw_water_mix);
-      this->parse_mix_input_string(water_mix_str, false);
-    }
-
+    this->build_energy_mix(energy_percentage_map, carbon_footprint_map, water_footprint_map);
     this->validate_energy_mix_composition();
   }
 

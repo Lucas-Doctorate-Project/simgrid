@@ -5,22 +5,24 @@
     <host core="4" id="host_br_static_co2" pstate="0" speed="100.0Mf">
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_emission_mix" value="Hydro:24 78.19;Solar:45 7.37;Wind: 11 5.46;Gas:490 6;Oil:650 2.43;Imported:225 0.55" />
+      <prop id="energy_mix" value="Hydro: 78.19;Solar: 7.37;Wind: 5.46;Gas: 6;Oil: 2.43;Imported: 0.55" />
+      <prop id="carbon_footprint" value="Hydro: 24;Solar: 45;Wind: 11;Gas: 490;Oil: 650;Imported: 225" />
       <!-- <# 17/11/2025, completing in imported - 69.1152gCO2 #> -->
     </host>
 
     <host core="4" id="host_fr_static_co2" pstate="0" speed="100.0Mf">      
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_emission_mix" value="Nuclear:5 73.47;Wind:13 9.13;Hydro:11 10.11;Solar:30 2.65;Gas:512 2.6;Biomass:230 1.55;Oil:901 0.1;Coal:983 0.39" />
+      <prop id="energy_mix" value="Nuclear: 73.47;Wind: 9.13;Hydro: 10.11;Solar: 2.65;Gas: 2.6;Biomass: 1.55;Oil: 0.1;Coal: 0.39" />
+      <prop id="carbon_footprint" value="Nuclear: 5;Wind: 13;Hydro: 11;Solar: 30;Gas: 512;Biomass: 230;Oil: 901;Coal: 983" />
       <!-- 17/11/2025, completed with nuclear - 28.3792gCO2 -->
     </host>
 
     <host core="4" id="host_usa_static_co2" pstate="0" speed="100.0Mf">      
       <prop id="wattage_per_state" value="100.0:100:200.0" />
       <prop id="wattage_off" value="5" />
-      <prop id="carbon_intensity" value="403.65" />
-      <prop id="carbon_emission_mix" value="Hydro:24 1.44;Wind:11 3.99;Solar:27 3.06;Nuclear:12 34.03;Coal:1057 15.39;Gas:515 41.39;Oil:1214 0.7" />
+      <prop id="energy_mix" value="Hydro: 1.44;Wind: 3.99;Solar: 3.06;Nuclear: 34.03;Coal: 15.39;Gas: 41.39;Oil: 0.7" />
+      <prop id="carbon_footprint" value="Hydro: 24;Wind: 11;Solar: 27;Nuclear: 12;Coal: 1057;Gas: 515;Oil: 1214" />
       <!-- PJM - 17/11/2025, completed unknown in gas and rest in nuclear - 390.0231gCO2 -->
     </host>
 
