@@ -49,6 +49,7 @@ All scenarios use a **10‑hour time horizon**.
 - E_kWh = 180000 / 3600000 = 0.05 kWh
 
 - **Expected emissions:**  0.05 * 390.0231 = **19.501155 g** CO2
+- **Expected water consumption:**  0.05 * 1,8887756 = **0.094439 L**
 
 ---
 
@@ -58,6 +59,7 @@ All scenarios use a **10‑hour time horizon**.
 - E_J = 100 * 3600 * 10 = 3600000 J
 - E_kWh = 1.0 kWh
 - **Expected emissions:** 1.0 * 28.3792 = **28.3792 gCO2**
+- **Expected water consumption:** 1.0 * 3.740154 = *3.740154 L**
 
 ---
 
@@ -69,13 +71,13 @@ We evaluate running tasks using all the cores in the machine in the following 4 
 - C : running computations using 3 CPU cores for 3 hours
 - D : running computations using 4 CPU cores for 4 hours
 
-| Scenarios | Cores | Power (W) | Duration (h) | Energy (kWh) | CO₂ (g) |
-|---------|-------|-----------|--------------|--------------|---------|
-| A       | 1     | 125       | 1            | 0.125        | 8.6394  |
-| B       | 2     | 150       | 2            | 0.300        | 20.73456  |
-| C       | 3     | 175       | 3            | 0.525        | 36.28548  |
-| D       | 4     | 200       | 4            | 0.800        | 55.29216  |
-| **Total** | —   | —         | 10           | **1.750**    | **120.9516** |
+| Scenarios | Cores | Power (W) | Duration (h) | Energy (kWh) | CO₂ (g) | H₂O (L) |
+|---------|-------|-----------|--------------|--------------|---------|------------|
+| A       | 1     | 125       | 1            | 0.125        | 8.6394  | 1.4797  |
+| B       | 2     | 150       | 2            | 0.300        | 20.73456  | 3.5512  |
+| C       | 3     | 175       | 3            | 0.525        | 36.28548  | 6.2147  |
+| D       | 4     | 200       | 4            | 0.800        | 55.29216  | 9.4701  |
+| **Total** | —   | —         | 10           | **1.750**    | **120.9516** | **20.715916** |
 
 
 ---

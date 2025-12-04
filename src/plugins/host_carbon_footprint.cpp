@@ -339,8 +339,8 @@ static void on_host_destruction(simgrid::s4u::Host const& host)
   if (dynamic_cast<simgrid::s4u::VirtualMachine const*>(&host)) // Ignore virtual machines
     return;
 
-  XBT_INFO("Carbon emitted by host %s: %f g", host.get_cname(),
-           host.extension<HostEnvironmentalFootprint>()->get_host_carbon_footprint());
+  XBT_INFO("Host %s: Carbon emitted by host: %f g. Water consumed by host: %f L.", host.get_cname(),
+           host.extension<HostEnvironmentalFootprint>()->get_host_carbon_footprint(), host.extension<HostEnvironmentalFootprint>()->get_host_water_footprint());
 }
 
 
