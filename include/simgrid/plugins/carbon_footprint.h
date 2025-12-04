@@ -16,10 +16,17 @@
 
 SG_BEGIN_DECL
 
+struct EnergySource {
+    double percentage = 0.0; // How much this source contributes to the mix (in %)
+    double carbon_intensity = 0.0; // Grams of CO2 emitted per kWh produced
+    double water_intensity = 0.0; // Liters of water consumed per kWh produced
+};
+
 XBT_PUBLIC void sg_host_carbon_footprint_plugin_init();
 XBT_PUBLIC double sg_host_get_carbon_footprint(const_sg_host_t host);
-XBT_PUBLIC void sg_host_set_carbon_emission_mix(const_sg_host_t host, const std::map<std::string, std::pair<double, double>>& mix);
-XBT_PUBLIC std::string sg_host_get_carbon_emission_mix_formatted(const_sg_host_t host);
+XBT_PUBLIC double sg_host_get_water_footprint(const_sg_host_t host);
+XBT_PUBLIC void sg_host_set_energy_mix(const_sg_host_t host, const std::map<std::string, EnergySource>& mix);
+XBT_PUBLIC std::string sg_host_get_energy_mix_formatted(const_sg_host_t host);
 
 SG_END_DECL
 
