@@ -421,7 +421,7 @@ set(PLUGINS_SRC
   src/plugins/chaos_monkey.cpp
   src/plugins/file_system/s4u_FileSystem.cpp
   src/plugins/host_dvfs.cpp
-  src/plugins/host_carbon_footprint.cpp
+  src/plugins/host_environmental_footprint.cpp
   src/plugins/host_energy.cpp
   src/plugins/host_load.cpp
   src/plugins/vm_load.cpp
@@ -621,7 +621,7 @@ set(headers_to_install
   include/simgrid/plugins/dvfs.h
   include/simgrid/plugins/energy.h
   include/simgrid/plugins/file_system.h
-  include/simgrid/plugins/carbon_footprint.h
+  include/simgrid/plugins/environmental_footprint.h
   include/simgrid/plugins/jbod.hpp
   include/simgrid/plugins/live_migration.h
   include/simgrid/plugins/load.h

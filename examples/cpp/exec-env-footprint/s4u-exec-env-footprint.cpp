@@ -5,7 +5,7 @@
 
 #include "simgrid/s4u.hpp"
 #include "simgrid/plugins/energy.h"
-#include "simgrid/plugins/carbon_footprint.h"
+#include "simgrid/plugins/environmental_footprint.h"
 
 XBT_LOG_NEW_DEFAULT_CATEGORY(s4u_test, "Messages specific for this s4u example");
 namespace sg4 = simgrid::s4u;
@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
   // usa_grid_co2[seconds_in_hour*9] = 457.54;
 
   sg_host_energy_plugin_init();              
-  sg_host_carbon_footprint_plugin_init();
+  sg_host_environmental_footprint_plugin_init();
 
   sg4::Engine e(&argc, argv);
   e.load_platform(argv[1]);

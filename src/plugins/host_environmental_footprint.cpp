@@ -4,7 +4,7 @@
  * under the terms of the license (GNU LGPL) which comes with this package. */
 
 #include "simgrid/Exception.hpp"
-#include "simgrid/plugins/carbon_footprint.h"
+#include "simgrid/plugins/environmental_footprint.h"
 #include "simgrid/s4u/Engine.hpp"
 #include "simgrid/plugins/energy.h"
 #include "simgrid/s4u/VirtualMachine.hpp"
@@ -22,7 +22,7 @@
 #include <src/simgrid/math_utils.h>
 
 
-SIMGRID_REGISTER_PLUGIN(host_carbon_footprint, "Host carbon footprint", &sg_host_carbon_footprint_plugin_init)
+SIMGRID_REGISTER_PLUGIN(host_environmental_footprint, "Host environmental footprint", &sg_host_environmental_footprint_plugin_init)
 
 
 /** @addtogroup plugin_environmental_footprint
@@ -31,7 +31,7 @@ This is the environmental footprint plugin, enabling the simulation of CO₂ emi
 It calculates the total CO₂ emissions of each host based on its energy consumption and the CO₂ emission rate, and the total water consumption of each host based 
 on its energy consumption and the water consumption rate.
 
-To activate this plugin, first call :cpp:func:`sg_host_carbon_footprint_plugin_init()` before loading your platform. 
+To activate this plugin, first call :cpp:func:`sg_host_environmental_footprint_plugin_init()` before loading your platform. 
 Then, use :cpp:func:`sg_host_get_carbon_footprint()` to retrieve the total CO₂ emissions of a given host, or :cpp:func:`sg_host_get_water_footprint()` 
 to retrieve the total water consumption.
 
@@ -75,7 +75,7 @@ Keep this in mind when using this plugin.
 */
 
 
-XBT_LOG_NEW_DEFAULT_SUBCATEGORY(host_carbon_footprint, kernel, "Logging specific to the host environmental footprint plugin");
+XBT_LOG_NEW_DEFAULT_SUBCATEGORY(host_environmental_footprint, kernel, "Logging specific to the host environmental footprint plugin");
 
 
 namespace simgrid::plugin {
@@ -314,11 +314,11 @@ static void on_action_state_change(simgrid::kernel::resource::CpuAction const& a
       if (const auto* vm = dynamic_cast<simgrid::s4u::VirtualMachine*>(host))
         host = vm->get_pm();
 
-      // Get the host_carbon_footprint extension for the relevant host
-      auto* host_carbon_footprint = host->extension<HostEnvironmentalFootprint>();
+      // Get the host_environmental_footprint extension for the relevant host
+      auto* host_environmental_footprint = host->extension<HostEnvironmentalFootprint>();
 
-      if (host_carbon_footprint->get_last_update_time() < simgrid::s4u::Engine::get_clock())
-        host_carbon_footprint->update();
+      if (host_environmental_footprint->get_last_update_time() < simgrid::s4u::Engine::get_clock())
+        host_environmental_footprint->update();
     }
   }
 }
@@ -358,7 +358,7 @@ static void on_simulation_end()
  * \brief Enable host carbon footprint plugin
  * \details Enable carbon footprint plugin to get the carbon footprint of each cpu. 
  */
-void sg_host_carbon_footprint_plugin_init()
+void sg_host_environmental_footprint_plugin_init()
 {
   if (HostEnvironmentalFootprint::EXTENSION_ID.valid())
     return;
@@ -376,7 +376,7 @@ void sg_host_carbon_footprint_plugin_init()
 static void ensure_plugin_inited()
 {
   if (not HostEnvironmentalFootprint::EXTENSION_ID.valid())
-    throw simgrid::xbt::InitializationError("The Carbon Footprint plugin is not active. Please call sg_host_carbon_footprint_plugin_init() "
+    throw simgrid::xbt::InitializationError("The Carbon Footprint plugin is not active. Please call sg_host_environmental_footprint_plugin_init() "
                                             "before calling any function related to that plugin.");
 }
 

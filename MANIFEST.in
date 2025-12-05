@@ -273,8 +273,6 @@ include examples/cpp/exec-async/s4u-exec-async.cpp
 include examples/cpp/exec-async/s4u-exec-async.tesh
 include examples/cpp/exec-basic/s4u-exec-basic.cpp
 include examples/cpp/exec-basic/s4u-exec-basic.tesh
-include examples/cpp/exec-co2/s4u-exec-co2.cpp
-include examples/cpp/exec-co2/s4u-exec-co2.tesh
 include examples/cpp/exec-cpu-factors/s4u-exec-cpu-factors.cpp
 include examples/cpp/exec-cpu-factors/s4u-exec-cpu-factors.tesh
 include examples/cpp/exec-cpu-nonlinear/s4u-exec-cpu-nonlinear.cpp
@@ -283,6 +281,8 @@ include examples/cpp/exec-dependent/s4u-exec-dependent.cpp
 include examples/cpp/exec-dependent/s4u-exec-dependent.tesh
 include examples/cpp/exec-dvfs/s4u-exec-dvfs.cpp
 include examples/cpp/exec-dvfs/s4u-exec-dvfs.tesh
+include examples/cpp/exec-env-footprint/s4u-exec-env-footprint.cpp
+include examples/cpp/exec-env-footprint/s4u-exec-env-footprint.tesh
 include examples/cpp/exec-failure/s4u-exec-failure.cpp
 include examples/cpp/exec-failure/s4u-exec-failure.tesh
 include examples/cpp/exec-ptask-multicore-latency/s4u-exec-ptask-multicore-latency.cpp
@@ -2189,10 +2189,10 @@ include include/simgrid/modelchecker.h
 include include/simgrid/mutex.h
 include include/simgrid/plugins/ProducerConsumer.hpp
 include include/simgrid/plugins/battery.hpp
-include include/simgrid/plugins/carbon_footprint.h
 include include/simgrid/plugins/chiller.hpp
 include include/simgrid/plugins/dvfs.h
 include include/simgrid/plugins/energy.h
+include include/simgrid/plugins/environmental_footprint.h
 include include/simgrid/plugins/file_system.h
 include include/simgrid/plugins/jbod.hpp
 include include/simgrid/plugins/live_migration.h
@@ -2593,9 +2593,9 @@ include src/plugins/battery.cpp
 include src/plugins/chaos_monkey.cpp
 include src/plugins/chiller.cpp
 include src/plugins/file_system/s4u_FileSystem.cpp
-include src/plugins/host_carbon_footprint.cpp
 include src/plugins/host_dvfs.cpp
 include src/plugins/host_energy.cpp
+include src/plugins/host_environmental_footprint.cpp
 include src/plugins/host_load.cpp
 include src/plugins/jbod.cpp
 include src/plugins/link_energy.cpp
