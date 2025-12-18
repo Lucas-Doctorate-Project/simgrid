@@ -11,7 +11,7 @@ XBT_LOG_NEW_DEFAULT_CATEGORY(s4u_test, "Messages specific for this s4u example")
 namespace sg4 = simgrid::s4u;
 
 
-void turn_host_off(simgrid::s4u::Host * host)
+static void turn_host_off(simgrid::s4u::Host * host)
 {
   host->turn_off();
 }
@@ -27,7 +27,7 @@ void turn_host_off(simgrid::s4u::Host * host)
 //   }      
 // }
 
-void test_execution()
+static void test_execution()
 {          
     sg4::Host* host = sg4::this_actor::get_host();
     
@@ -87,8 +87,6 @@ int main(int argc, char* argv[])
   std::map<int, double> france_grid_co2;
   std::map<int, double > usa_grid_co2;
 
-  int seconds_in_hour = 3600;
-
   // Grid electricity emissions values
 
   // For Brazil    
@@ -135,18 +133,18 @@ int main(int argc, char* argv[])
   e.load_platform(argv[1]);
   
   sg4::Host* host_br_static_co2 = sg4::Host::by_name("host_br_static_co2");
-  sg4::Host* host_fr_static_co2 = sg4::Host::by_name("host_fr_static_co2");
   sg4::Host* host_usa_static_co2 = sg4::Host::by_name("host_usa_static_co2"); 
+  // sg4::Host* host_fr_static_co2 = sg4::Host::by_name("host_fr_static_co2"); -> Unused on code
 
   // sg4::Host* host_br_dynamic_co2 = sg4::Host::by_name("host_br_dynamic_co2");
   // sg4::Host* host_fr_dynamic_co2 = sg4::Host::by_name("host_fr_dynamic_co2");
   // sg4::Host* host_usa_dynamic_co2 = sg4::Host::by_name("host_usa_dynamic_co2");
 
 
-  sg4::Actor::create("turn_off test", host_br_static_co2, turn_host_off, host_usa_static_co2);
+  host_br_static_co2->add_actor("turn_off test", turn_host_off, host_usa_static_co2);
   // sg4::Actor::create("turn_off test", host_br_static_co2, turn_host_off,host_usa_dynamic_co2);
        
-  sg4::Actor::create("execution", host_br_static_co2, test_execution);
+  host_br_static_co2->add_actor("execution", test_execution);
   // sg4::Actor::create("execution", host_br_dynamic_co2, test_execution);
 
   // sg4::Actor::create("update_co2", host_br_static_co2, update_co2_actor,host_usa_dynamic_co2,usa_grid_co2);
