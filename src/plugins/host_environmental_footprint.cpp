@@ -194,6 +194,7 @@ void HostEnvironmentalFootprint::set_host_energy_mix(const std::map<std::string,
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
   this->energy_mix = mix;
+  this->validate_energy_mix_composition();
 }
 
 std::string HostEnvironmentalFootprint::get_host_energy_mix_formatted() 
@@ -243,6 +244,8 @@ void HostEnvironmentalFootprint::set_carbon_intensities(const std::map<std::stri
     if (this->energy_mix.find(source_name) != this->energy_mix.end())
       this->energy_mix[source_name].carbon_intensity = intensity;
   }
+
+  this->validate_energy_mix_composition();
 }
 
 void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::string, double>& intensities) 
@@ -254,6 +257,8 @@ void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::strin
     if (this->energy_mix.find(source_name) != this->energy_mix.end())
       this->energy_mix[source_name].water_intensity = intensity;
   }
+
+  this->validate_energy_mix_composition();
 }
 
 HostEnvironmentalFootprint::~HostEnvironmentalFootprint() = default;

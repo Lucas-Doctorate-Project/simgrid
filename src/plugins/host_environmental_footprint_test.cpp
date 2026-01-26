@@ -261,37 +261,45 @@ TEST_CASE("plugins::host_environmental_footprint: Get methods return correct val
   }
   
   SECTION("Modified intensities affect footprint calculations")
-  {
+  { 
+    // Start with 100% coal at half intensities
     std::map<std::string, EnergySource> mix = {{"Coal", {100.0, 500.0, 750.0}}};
     sg_host_set_energy_mix(host, mix);
-    
-    host->add_actor("worker1", []() {
+
+    double carbon_after_first = 0.0;
+    double water_after_first  = 0.0;
+    double carbon_after_second = 0.0;
+    double water_after_second  = 0.0;
+
+    host->add_actor("two_phase_worker", [&]() {
+      // Phase 1: run workload
       simgrid::s4u::this_actor::execute(1e9);
-    });
-    e.run();
-    
-    double carbon_first = sg_host_get_carbon_footprint(host);
-    double water_first = sg_host_get_water_footprint(host);
-    
-    // Double the carbon intensity
-    std::map<std::string, double> new_carbon = {{"Coal", 1000.0}};
-    sg_host_set_carbon_intensities(host, new_carbon);
-    
-    // Double the water intensity
-    std::map<std::string, double> new_water = {{"Coal", 1500.0}};
-    sg_host_set_water_intensities(host, new_water);
-    
-    // Run same workload again
-    host->add_actor("worker2", []() {
+
+      carbon_after_first = sg_host_get_carbon_footprint(host);
+      water_after_first  = sg_host_get_water_footprint(host);
+
+      // Update intensities
+      sg_host_set_carbon_intensities(host, {{"Coal", 1000.0}}); // 2x carbon
+      sg_host_set_water_intensities(host,  {{"Coal", 1500.0}}); // 2x water
+
+      // Phase 2: run same workload again
       simgrid::s4u::this_actor::execute(1e9);
+
+      carbon_after_second = sg_host_get_carbon_footprint(host);
+      water_after_second  = sg_host_get_water_footprint(host);
     });
+
     e.run();
-    
-    double carbon_second = sg_host_get_carbon_footprint(host);
-    double water_second = sg_host_get_water_footprint(host);
-    
-    REQUIRE(carbon_second == Approx(2.0*carbon_first));
-    REQUIRE(water_second == Approx(2.0*water_first));
+
+    // Compare increments
+    const double carbon_delta1 = carbon_after_first;
+    const double carbon_delta2 = carbon_after_second - carbon_after_first;
+
+    const double water_delta1 = water_after_first;
+    const double water_delta2 = water_after_second - water_after_first;
+
+    REQUIRE(carbon_delta2 == Approx(2.0 * carbon_delta1).margin(1e-9));
+    REQUIRE(water_delta2  == Approx(2.0 * water_delta1).margin(1e-9));
   }
   
   SECTION("Footprint getters are idempotent")
