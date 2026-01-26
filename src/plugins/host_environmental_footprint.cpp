@@ -90,6 +90,8 @@ public:
 
   double get_host_carbon_footprint();
   double get_host_water_footprint();
+  double get_host_carbon_intensity();
+  double get_host_water_intensity();
   double get_last_update_time() const { return last_updated; }
   void set_host_energy_mix(const std::map<std::string, EnergySource>& mix);
   std::string get_host_energy_mix_formatted();
@@ -187,6 +189,23 @@ double HostEnvironmentalFootprint::get_host_water_footprint()
 
   return this->total_water_footprint;
 }
+
+double HostEnvironmentalFootprint::get_host_carbon_intensity() 
+{
+  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+
+  return this->current_weighted_carbon_intensity;
+}
+
+double HostEnvironmentalFootprint::get_host_water_intensity() 
+{
+  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+
+  return this->current_weighted_water_intensity;
+}
+
 
 void HostEnvironmentalFootprint::set_host_energy_mix(const std::map<std::string, EnergySource>& mix)
 {
@@ -455,6 +474,18 @@ double sg_host_get_water_footprint(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostEnvironmentalFootprint>()->get_host_water_footprint();
+}
+
+double sg_host_get_carbon_intensity(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_host_carbon_intensity();
+}
+
+double sg_host_get_water_intensity(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_host_water_intensity();
 }
 
 void sg_host_set_energy_mix(const_sg_host_t host, const std::map<std::string, EnergySource>& mix)

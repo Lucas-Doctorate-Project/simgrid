@@ -30,6 +30,7 @@ TEST_CASE("plugins::host_environmental_footprint: Basic functionality", "[plugin
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
+  e.seal_platform();
   
   SECTION("Initial footprints are zero")
   {
@@ -49,6 +50,7 @@ TEST_CASE("plugins::host_environmental_footprint: Basic energy mix configuration
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
+  e.seal_platform();
   
   SECTION("Set complete energy mix")
   {
@@ -97,6 +99,7 @@ TEST_CASE("plugins::host_environmental_footprint: Footprint accumulation", "[plu
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
+  e.seal_platform();
   
   std::map<std::string, EnergySource> mix = {{"Coal", {100.0, 1000.0, 1500.0}}};
   sg_host_set_energy_mix(host, mix);
@@ -123,6 +126,7 @@ TEST_CASE("plugins::host_environmental_footprint: Footprint calculation accuracy
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
+  e.seal_platform();
   
   SECTION("Carbon footprint calculated correctly with known energy consumption")
   {
@@ -211,6 +215,7 @@ TEST_CASE("plugins::host_environmental_footprint: Get methods return correct val
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
+  e.seal_platform();
   
   SECTION("Energy mix formatted output contains set values")
   {
@@ -334,6 +339,7 @@ TEST_CASE("plugins::host_environmental_footprint: Getters work when called from 
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
+  e.seal_platform();
 
   std::map<std::string, EnergySource> mix = {
       {"Coal", {100.0, 1000.0, 1500.0}}
@@ -365,3 +371,48 @@ TEST_CASE("plugins::host_environmental_footprint: Getters work when called from 
   REQUIRE(carbon_end >= carbon_mid);
   REQUIRE(water_end  >= water_mid);
 }
+
+TEST_CASE("plugins::host_environmental_footprint: get_*_intensity returns weighted values", "[plugin][enviromental_footprint]")
+{
+  sg_host_environmental_footprint_plugin_init();
+
+  simgrid::s4u::Engine e("test");
+  auto* host = create_test_host(e);
+  e.seal_platform();
+
+  // 70% Coal (1000 g/kWh, 1500 L/kWh) + 30% Hydro (24 g/kWh, 100 L/kWh)
+  std::map<std::string, EnergySource> mix = {
+      {"Coal",  {70.0, 1000.0, 1500.0}},
+      {"Hydro", {30.0,   24.0,  100.0}}
+  };
+  sg_host_set_energy_mix(host, mix);
+
+  const double expected_carbon = 0.70 * 1000.0 + 0.30 * 24.0;   // 707.2 g/kWh
+  const double expected_water  = 0.70 * 1500.0 + 0.30 * 100.0;  // 1080  L/kWh
+
+  REQUIRE(sg_host_get_carbon_intensity(host) == Approx(expected_carbon).margin(1e-12));
+  REQUIRE(sg_host_get_water_intensity(host)  == Approx(expected_water).margin(1e-12));
+}
+
+TEST_CASE("plugins::host_environmental_footprint: get_*_intensity updates after intensity changes", "[plugin][enviromental_footprint]")
+{
+  sg_host_environmental_footprint_plugin_init();
+
+  simgrid::s4u::Engine e("test");
+  auto* host = create_test_host(e);
+  e.seal_platform();
+
+  // Start: 100% Coal with lower intensities
+  sg_host_set_energy_mix(host, {{"Coal", {100.0, 500.0, 750.0}}});
+
+  REQUIRE(sg_host_get_carbon_intensity(host) == Approx(500.0).margin(1e-12));
+  REQUIRE(sg_host_get_water_intensity(host)  == Approx(750.0).margin(1e-12));
+
+  // Change intensities (should reflect immediately in getters)
+  sg_host_set_carbon_intensities(host, {{"Coal", 1000.0}});
+  sg_host_set_water_intensities(host,  {{"Coal", 1500.0}});
+
+  REQUIRE(sg_host_get_carbon_intensity(host) == Approx(1000.0).margin(1e-12));
+  REQUIRE(sg_host_get_water_intensity(host)  == Approx(1500.0).margin(1e-12));
+}
+
