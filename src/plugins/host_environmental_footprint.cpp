@@ -27,25 +27,50 @@ SIMGRID_REGISTER_PLUGIN(host_environmental_footprint, "Host environmental footpr
 
 /** @addtogroup plugin_environmental_footprint
 
-This is the environmental footprint plugin, enabling the simulation of CO₂ emissions and water consumption associated with the energy consumption of hosts in the simulated platform.
-It calculates the total CO₂ emissions of each host based on its energy consumption and the CO₂ emission rate, and the total water consumption of each host based 
-on its energy consumption and the water consumption rate.
+This is the environmental footprint plugin. It calculates both carbon and water footprint
+and intensity factors of SimGrid hosts.
 
-To activate this plugin, first call :cpp:func:`sg_host_environmental_footprint_plugin_init()` before loading your platform. 
-Then, use :cpp:func:`sg_host_get_carbon_footprint()` to retrieve the total CO₂ emissions of a given host, or :cpp:func:`sg_host_get_water_footprint()` 
+To calculate the intensities, we average known intensity factors from different sources
+according to the energy mix distribution. If we have \f$N\f$ distinct energy sources,
+the weighted intensity \f$\bar{I}\f$ can be calculated by:
+
+\f[
+  \bar{I} = \frac{\sum_{j=1}^{N} (I_j \cdot w_j)}{\sum_{j=1}^{N} w_j}
+\f]
+
+where \f$I_j\f$ is the intensity factor of source \f$j\f$, and \f$w_j\f$ is the proportion
+of the contribution of source \f$j\f$ to the energy mix. Note that \f$\sum_{j=1}^{N} w_j = 1\f$.
+
+From these averaged intensities, we can calculate the footprint \f$F\f$ by knowing how much
+energy a specific host consumes (\f$E\f$):
+
+\f[
+  F = \bar{I} \cdot E
+\f]
+
+The plugin calculates:
+- The total CO₂ emissions of each host based on its energy consumption and the CO₂ emission rate
+- The total water consumption of each host based on its energy consumption and the water consumption rate
+
+To activate this plugin, first call :cpp:func:`sg_host_environmental_footprint_plugin_init()` before loading your platform.
+Then, use :cpp:func:`sg_host_get_carbon_footprint()` to retrieve the total CO₂ emissions of a given host, or :cpp:func:`sg_host_get_water_footprint()`
 to retrieve the total water consumption.
 
-The carbon and water footprint are calculated dynamically during the simulation, taking into account the energy consumed by the host over time, the composition of the 
-energy mix of the host and the carbon/water intensity of each energy source in the mix.
-The energy mix is defined as a map, where each entry is keyed by the name of the energy source (like coal, natural gas, or renewables), and contains the percentage 
-that each source contributes to the overall energy mix, along with its carbon intensity (in grams of CO₂ per kWh) and water intensity (in liters per kWh).
-The energy mix can be configured for each host using :cpp:func:`sg_host_set_energy_mix()`.
+The footprints are calculated by multiplying the energy consumed by the host (tracked by the energy plugin) with the
+weighted intensity factors derived from the configured energy mix. Updates occur automatically when the host changes
+state, changes speed, or when footprint values are queried. The total footprint accumulates incrementally over the
+simulation time.
 
-As a result, the carbon footprint model requires the following parameters:
-  - **Energy consumption**: The energy consumed by the host, which is calculated by the energy plugin based on the host's power profile and activity.
-  - **Energy mix**: The composition of the energy sources used to generate the electricity consumed by the host (like coal composes 70%, hydro 23%, ...).
-  - **Carbon footprint**: The amount of CO₂ consumed (in kilograms per kWh) to generate a certain amount of energy (1 kWh).
-  - **Water footprint**: The amount of water consumed (in liters per kWh) to generate a certain amount of energy (1 kWh).
+The energy mix is defined as a map where each entry is keyed by the name of the energy source (e.g., coal, natural gas, renewables).
+Each entry specifies the percentage that source contributes to the overall energy mix, along with its carbon intensity
+(in grams of CO₂ per kWh) and water intensity (in liters per kWh). The energy mix can be configured for each host using
+:cpp:func:`sg_host_set_energy_mix()`.
+
+The model requires the following parameters:
+  - **Energy consumption**: Calculated by the energy plugin based on the host's power profile and activity
+  - **Energy mix**: The composition of energy sources (e.g., coal 70%, hydro 20%, solar 10%)
+  - **Carbon intensity**: The amount of CO₂ emitted (in grams per kWh) to generate energy from each source
+  - **Water intensity**: The amount of water consumed (in liters per kWh) to generate energy from each source
 
 Here is an example of XML declaration:
 
@@ -54,17 +79,10 @@ Here is an example of XML declaration:
    <host id="Host1" speed="100.0Mf, 1e-9Mf, 0.5f, 0.05f" pstate="0">
        <prop id="wattage_per_state" value="30.0:30.0:100.0, 9.75:9.75:9.75, 200.996721311:200.996721311:200.996721311, 425.1743849:425.1743849:425.1743849" />
        <prop id="wattage_off" value="9.75" />
-        <prop id="energy_mix" value="Coal: 70;Hydro: 20;Solar: 10" />
-        <prop id="carbon_footprint" value="Coal: 1000;Hydro: 24;Solar: 50" />
-        <prop id="water_footprint" value="Coal: 1500;Hydro: 100;Solar: 50" />
+        <prop id="energy_mix" value="Coal:70;Hydro:20;Solar:10" />
+        <prop id="carbon_intensity" value="Coal:1000;Hydro:24;Solar:50" />
+        <prop id="water_intensity" value="Coal:1500;Hydro:100;Solar:50" />
    </host>
-
-In this example:
-- The `wattage_per_state` property defines the power consumption (in watts) for each pstate of the host.
-- The `wattage_off` property defines the power consumption when the host is turned off.
-- The `energy_mix` property defines the composition of the energy sources used to power the host.
-- The `carbon_footprint` property defines the CO₂ emission rate (in grams per kWh) for the host.
-- The `water_footprint` property defines the water consumption rate (in liters per kWh) for the host.
 
 
 ### How accurate are these models?
@@ -113,9 +131,9 @@ private:
   double current_weighted_water_intensity = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
 
   std::map<std::string, double> parse_string_into_map(const char* input_cstr);
-  void build_energy_mix(const std::map<std::string, double>& energy_percentage_map, 
-                        const std::map<std::string, double>& carbon_footprint_map,
-                        const std::map<std::string, double>& water_footprint_map);
+  void build_energy_mix(const std::map<std::string, double>& energy_percentage_map,
+                        const std::map<std::string, double>& carbon_intensity_map,
+                        const std::map<std::string, double>& water_intensity_map);
   void validate_energy_mix_composition();
 };
 
@@ -156,18 +174,18 @@ HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) 
   this->last_energy = sg_host_get_consumed_energy(host_);
 
   const char* raw_energy_mix = host_->get_property("energy_mix");
-  const char* raw_carbon_footprint = host_->get_property("carbon_footprint");
-  const char* raw_water_footprint = host_->get_property("water_footprint");
+  const char* raw_carbon_intensity = host_->get_property("carbon_intensity");
+  const char* raw_water_intensity = host_->get_property("water_intensity");
 
-  if (raw_carbon_footprint == nullptr && raw_water_footprint == nullptr) {
-    XBT_WARN("Host '%s': Missing values for properties 'carbon_footprint' and 'water_footprint', using default null energy mix.", host_->get_cname());
+  if (raw_carbon_intensity == nullptr && raw_water_intensity == nullptr) {
+    XBT_WARN("Host '%s': Missing values for properties 'carbon_intensity' and 'water_intensity', using default null energy mix.", host_->get_cname());
     this->energy_mix = this->default_energy_mix; // Default to 0 g/kWh and 0 L/kWh if not provided
   } else {
     std::map<std::string, double> energy_percentage_map = this->parse_string_into_map(raw_energy_mix);
-    std::map<std::string, double> carbon_footprint_map = this->parse_string_into_map(raw_carbon_footprint);
-    std::map<std::string, double> water_footprint_map = this->parse_string_into_map(raw_water_footprint);
+    std::map<std::string, double> carbon_intensity_map = this->parse_string_into_map(raw_carbon_intensity);
+    std::map<std::string, double> water_intensity_map = this->parse_string_into_map(raw_water_intensity);
 
-    this->build_energy_mix(energy_percentage_map, carbon_footprint_map, water_footprint_map);
+    this->build_energy_mix(energy_percentage_map, carbon_intensity_map, water_intensity_map);
     this->validate_energy_mix_composition();
   }
 
@@ -308,21 +326,21 @@ std::map<std::string, double> HostEnvironmentalFootprint::parse_string_into_map(
 }
 
 void HostEnvironmentalFootprint::build_energy_mix(const std::map<std::string, double>& energy_percentage_map,
-                      const std::map<std::string, double>& carbon_footprint_map,
-                      const std::map<std::string, double>& water_footprint_map) 
+                      const std::map<std::string, double>& carbon_intensity_map,
+                      const std::map<std::string, double>& water_intensity_map)
 {
   for (const auto& [source_name, percentage] : energy_percentage_map) {
     double carbon_intensity = 0.0, water_intensity = 0.0;
 
-    auto carbon_it = carbon_footprint_map.find(source_name);
-    if (carbon_it != carbon_footprint_map.end()) {
+    auto carbon_it = carbon_intensity_map.find(source_name);
+    if (carbon_it != carbon_intensity_map.end()) {
       carbon_intensity = carbon_it->second;
     } else {
       XBT_WARN("Warning: Missing carbon intensity for source '%s' on host '%s'. Using 0 g/kWh.", source_name.c_str(), host_->get_cname());
     }
 
-    auto water_it = water_footprint_map.find(source_name);
-    if (water_it != water_footprint_map.end()) {
+    auto water_it = water_intensity_map.find(source_name);
+    if (water_it != water_intensity_map.end()) {
       water_intensity = water_it->second;
     } else {
       XBT_WARN("Warning: Missing water intensity for source '%s' on host '%s'. Using 0 L/kWh.", source_name.c_str(), host_->get_cname());
