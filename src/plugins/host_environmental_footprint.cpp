@@ -252,10 +252,15 @@ std::string HostEnvironmentalFootprint::get_host_energy_mix_formatted()
     return ss.str();
 }
 
-void HostEnvironmentalFootprint::set_host_energy_mix_composition(const std::map<std::string, double>& composition) 
+void HostEnvironmentalFootprint::set_host_energy_mix_composition(const std::map<std::string, double>& composition)
 {
   if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+
+  // Zero out all existing percentages so stale sources (including NULL_SOURCE
+  // from the default mix) don't accumulate alongside the new composition.
+  for (auto& [source_name, source_info] : this->energy_mix)
+    source_info.percentage = 0.0;
 
   for (const auto& [source_name, percentage] : composition) {
     if (this->energy_mix.find(source_name) != this->energy_mix.end()) {
