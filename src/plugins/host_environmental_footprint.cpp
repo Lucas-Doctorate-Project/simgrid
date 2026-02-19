@@ -371,12 +371,6 @@ void HostEnvironmentalFootprint::validate_energy_mix_composition()
     new_weighted_water_intensity += (source_info.water_intensity * source_info.percentage) / 100.0;
   }
 
-  if (total > 0 && !double_equals(total, 100.0, 1E-9)) {
-      XBT_WARN("Host '%s' eco mix sums to %.2f%%, not 100%%. Using default emission mix.", host_->get_cname(), total);
-      this->energy_mix = this->default_energy_mix;
-      new_weighted_carbon_intensity = 0.0; 
-      new_weighted_water_intensity  = 0.0;
-  }
 
   this->current_weighted_carbon_intensity = new_weighted_carbon_intensity;
   this->current_weighted_water_intensity = new_weighted_water_intensity;
