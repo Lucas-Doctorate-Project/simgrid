@@ -110,7 +110,7 @@ public:
   double get_host_water_footprint();
   double get_host_carbon_intensity();
   double get_host_water_intensity();
-  double get_last_update_time() const { return last_updated; }
+  double get_last_update_time() const { return last_updated_; }
   void set_host_energy_mix(const std::map<std::string, EnergySource>& mix);
   std::string get_host_energy_mix_formatted();
   void set_host_energy_mix_composition(const std::map<std::string, double>& composition);
@@ -121,11 +121,11 @@ public:
 private:
   simgrid::s4u::Host* host_ = nullptr;
 
-  double last_updated = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
-  double last_energy;  /*< Amount of energy used so far (kwh) >*/
+  double last_updated_ = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
+  double total_used_energy_;  /*< Amount of energy used so far (kwh) >*/
   
-  std::map<std::string, EnergySource> energy_mix; /*< Energy sources making up the carbon emission mix */
-  const std::map<std::string, EnergySource> default_energy_mix = {{"NULL_SOURCE", EnergySource{100.0, 0.0, 0.0}}}; /*< Default energy mix if none is provided */
+  std::map<std::string, EnergySource> energy_mix_; /*< Energy sources making up the carbon emission mix */
+  const std::map<std::string, EnergySource> default_energy_mix_ = {{"NULL_SOURCE", EnergySource{100.0, 0.0, 0.0}}}; /*< Default energy mix if none is provided */
   
   double pue_ = 1.0;           // Power Usage Effectiveness (default: ideal)
   double wue_ = 0.0;           // Water Usage Effectiveness (L/kWh) - on-site cooling
@@ -134,11 +134,11 @@ private:
   double embodied_water_  = 0.0;  // total L embodied in host production
   double host_lifetime_seconds_  = 0.0;  // total L embodied in host production
 
-  double total_carbon_footprint = 0.0; /* Total CO2 emitted to produce the energy used by the host */ 
-  double total_water_footprint = 0.0; /* Total water used to produce the energy used by the host */
+  double total_carbon_footprint_ = 0.0; /* Total CO2 emitted to produce the energy used by the host */ 
+  double total_water_footprint_ = 0.0; /* Total water used to produce the energy used by the host */
   
-  double current_weighted_carbon_intensity = 0.0; /* Current weighted carbon intensity of the energy mix (g CO2/kWh) */
-  double current_weighted_water_intensity = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
+  double current_weighted_carbon_intensity_ = 0.0; /* Current weighted carbon intensity of the energy mix (g CO2/kWh) */
+  double current_weighted_water_intensity_ = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
 
   std::map<std::string, double> parse_string_into_map(const char* input_cstr);
   void build_energy_mix(const std::map<std::string, double>& energy_percentage_map,
@@ -151,7 +151,7 @@ simgrid::xbt::Extension<simgrid::s4u::Host, HostEnvironmentalFootprint> HostEnvi
 
 void HostEnvironmentalFootprint::update() 
 {
-  double start_time = this->last_updated;
+  double start_time = this->last_updated_;
   double finish_time = simgrid::s4u::Engine::get_clock();
 
   if (start_time >= finish_time) {
@@ -167,27 +167,27 @@ void HostEnvironmentalFootprint::update()
 
   double lifetime_fraction_this_step = (this->host_lifetime_seconds_ > 0.0) ? (deltaT / this->host_lifetime_seconds_) : 0.0;
 
-  double offsite_carbon_footprint = total_datacenter_energy_this_step_kwh * this->current_weighted_carbon_intensity;
+  double offsite_carbon_footprint = total_datacenter_energy_this_step_kwh * this->current_weighted_carbon_intensity_;
   double embodied_carbon_footprint = this->embodied_carbon_ * lifetime_fraction_this_step;
   
   double onsite_water_consumption = computation_energy_this_step_kwh * this->wue_;
-  double offsite_water_consumption = total_datacenter_energy_this_step_kwh * this->current_weighted_water_intensity;
+  double offsite_water_consumption = total_datacenter_energy_this_step_kwh * this->current_weighted_water_intensity_;
   double embodied_water_consumption = this->embodied_water_ * lifetime_fraction_this_step;
 
-  this->total_carbon_footprint = this->total_carbon_footprint + offsite_carbon_footprint + embodied_carbon_footprint;
-  this->total_water_footprint = this->total_water_footprint + offsite_water_consumption + onsite_water_consumption + embodied_water_consumption;
+  this->total_carbon_footprint_ = this->total_carbon_footprint_ + offsite_carbon_footprint + embodied_carbon_footprint;
+  this->total_water_footprint_ = this->total_water_footprint_ + offsite_water_consumption + onsite_water_consumption + embodied_water_consumption;
 
-  this->last_updated = finish_time;
+  this->last_updated_ = finish_time;
 
   XBT_DEBUG("[update_carbon_footprint of %s] period=[%.8f-%.8f]; instantaneous power=%.2f W;"
             "total carbon footprint now: %.8f gCO2eq; total water footprint now: %.8f L",
             host_->get_cname(), start_time, finish_time, instantaneous_power_consumption, 
-            this->total_carbon_footprint, this->total_water_footprint);
+            this->total_carbon_footprint_, this->total_water_footprint_);
 }
 
 HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) : host_(ptr) 
 {
-  this->last_energy = sg_host_get_consumed_energy(host_);
+  this->total_used_energy_ = sg_host_get_consumed_energy(host_);
 
   const char* raw_energy_mix = host_->get_property("energy_mix");
   const char* raw_carbon_intensity = host_->get_property("carbon_intensity");
@@ -215,7 +215,7 @@ HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) 
 
   if (raw_carbon_intensity == nullptr && raw_water_intensity == nullptr) {
     XBT_WARN("Host '%s': Missing values for properties 'carbon_intensity' and 'water_intensity', using default null energy mix.", host_->get_cname());
-    this->energy_mix = this->default_energy_mix; // Default to 0 g/kWh and 0 L/kWh if not provided
+    this->energy_mix_ = this->default_energy_mix_; // Default to 0 g/kWh and 0 L/kWh if not provided
   } else {
     std::map<std::string, double> energy_percentage_map = this->parse_string_into_map(raw_energy_mix);
     std::map<std::string, double> carbon_intensity_map = this->parse_string_into_map(raw_carbon_intensity);
@@ -230,43 +230,43 @@ HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) 
 
 double HostEnvironmentalFootprint::get_host_carbon_footprint() 
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
-  return this->total_carbon_footprint;
+  return this->total_carbon_footprint_;
 }
 
 double HostEnvironmentalFootprint::get_host_water_footprint() 
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
-  return this->total_water_footprint;
+  return this->total_water_footprint_;
 }
 
 double HostEnvironmentalFootprint::get_host_carbon_intensity() 
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
-  return this->current_weighted_carbon_intensity;
+  return this->current_weighted_carbon_intensity_;
 }
 
 double HostEnvironmentalFootprint::get_host_water_intensity() 
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
-  return this->current_weighted_water_intensity;
+  return this->current_weighted_water_intensity_;
 }
 
 
 void HostEnvironmentalFootprint::set_host_energy_mix(const std::map<std::string, EnergySource>& mix)
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
-  this->energy_mix = mix;
+  this->energy_mix_ = mix;
   this->validate_energy_mix_composition();
 }
 
@@ -276,7 +276,7 @@ std::string HostEnvironmentalFootprint::get_host_energy_mix_formatted()
   
   ss << std::fixed << std::setprecision(2);
 
-    for (const auto& entry : this->energy_mix) {
+    for (const auto& entry : this->energy_mix_) {
         const std::string& source_name = entry.first;
         double percentage = entry.second.percentage;
         double carbon_footprint = entry.second.carbon_intensity;
@@ -290,23 +290,23 @@ std::string HostEnvironmentalFootprint::get_host_energy_mix_formatted()
 
 void HostEnvironmentalFootprint::set_host_energy_mix_composition(const std::map<std::string, double>& composition)
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
   // Zero out all existing percentages so stale sources (including NULL_SOURCE
   // from the default mix) don't accumulate alongside the new composition.
-  for (auto& [source_name, source_info] : this->energy_mix)
+  for (auto& [source_name, source_info] : this->energy_mix_)
     source_info.percentage = 0.0;
 
   for (const auto& [source_name, percentage] : composition) {
-    if (this->energy_mix.find(source_name) != this->energy_mix.end()) {
-      this->energy_mix[source_name].percentage = percentage;
+    if (this->energy_mix_.find(source_name) != this->energy_mix_.end()) {
+      this->energy_mix_[source_name].percentage = percentage;
     } else {
       EnergySource source_info;
       source_info.percentage = percentage;
       source_info.carbon_intensity = 0.0;
       source_info.water_intensity = 0.0;
-      this->energy_mix[source_name] = source_info;
+      this->energy_mix_[source_name] = source_info;
     }
   }
 
@@ -315,12 +315,12 @@ void HostEnvironmentalFootprint::set_host_energy_mix_composition(const std::map<
 
 void HostEnvironmentalFootprint::set_carbon_intensities(const std::map<std::string, double>& intensities) 
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
   for (const auto& [source_name, intensity] : intensities) {
-    if (this->energy_mix.find(source_name) != this->energy_mix.end())
-      this->energy_mix[source_name].carbon_intensity = intensity;
+    if (this->energy_mix_.find(source_name) != this->energy_mix_.end())
+      this->energy_mix_[source_name].carbon_intensity = intensity;
   }
 
   this->validate_energy_mix_composition();
@@ -328,12 +328,12 @@ void HostEnvironmentalFootprint::set_carbon_intensities(const std::map<std::stri
 
 void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::string, double>& intensities) 
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
   for (const auto& [source_name, intensity] : intensities) {
-    if (this->energy_mix.find(source_name) != this->energy_mix.end())
-      this->energy_mix[source_name].water_intensity = intensity;
+    if (this->energy_mix_.find(source_name) != this->energy_mix_.end())
+      this->energy_mix_[source_name].water_intensity = intensity;
   }
 
   this->validate_energy_mix_composition();
@@ -341,7 +341,7 @@ void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::strin
 
 void HostEnvironmentalFootprint::set_wue(double new_wue)
 {
-  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
     simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 
     this->wue_ = new_wue;
@@ -400,7 +400,7 @@ void HostEnvironmentalFootprint::build_energy_mix(const std::map<std::string, do
     source_info.carbon_intensity = carbon_intensity;
     source_info.water_intensity = water_intensity;
 
-    this->energy_mix[source_name] = source_info;
+    this->energy_mix_[source_name] = source_info;
   }
 }
 
@@ -409,15 +409,15 @@ void HostEnvironmentalFootprint::validate_energy_mix_composition()
   double new_weighted_carbon_intensity = 0.0;
   double new_weighted_water_intensity = 0.0;
   double total = 0.0;
-  for (const auto& [source_name, source_info] : this->energy_mix) {
+  for (const auto& [source_name, source_info] : this->energy_mix_) {
     total += source_info.percentage;
     new_weighted_carbon_intensity += (source_info.carbon_intensity * source_info.percentage) / 100.0;
     new_weighted_water_intensity += (source_info.water_intensity * source_info.percentage) / 100.0;
   }
 
 
-  this->current_weighted_carbon_intensity = new_weighted_carbon_intensity;
-  this->current_weighted_water_intensity = new_weighted_water_intensity;
+  this->current_weighted_carbon_intensity_ = new_weighted_carbon_intensity;
+  this->current_weighted_water_intensity_ = new_weighted_water_intensity;
 }
 
 
