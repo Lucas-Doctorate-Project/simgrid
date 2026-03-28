@@ -116,6 +116,7 @@ public:
   void set_host_energy_mix_composition(const std::map<std::string, double>& composition);
   void set_carbon_intensities(const std::map<std::string, double>& intensities);
   void set_water_intensities(const std::map<std::string, double>& intensities);
+  void set_wue(double new_wue);
   void update();
 private:
   simgrid::s4u::Host* host_ = nullptr;
@@ -125,8 +126,17 @@ private:
   
   std::map<std::string, EnergySource> energy_mix; /*< Energy sources making up the carbon emission mix */
   const std::map<std::string, EnergySource> default_energy_mix = {{"NULL_SOURCE", EnergySource{100.0, 0.0, 0.0}}}; /*< Default energy mix if none is provided */
+  
+  double pue_ = 1.0;           // Power Usage Effectiveness (default: ideal)
+  double wue_ = 0.0;           // Water Usage Effectiveness (L/kWh) - on-site cooling
+
+  double embodied_carbon_ = 0.0;  // total gCO2 embodied in host production 
+  double embodied_water_  = 0.0;  // total L embodied in host production
+  double host_lifetime_seconds_  = 0.0;  // total L embodied in host production
+
   double total_carbon_footprint = 0.0; /* Total CO2 emitted to produce the energy used by the host */ 
   double total_water_footprint = 0.0; /* Total water used to produce the energy used by the host */
+  
   double current_weighted_carbon_intensity = 0.0; /* Current weighted carbon intensity of the energy mix (g CO2/kWh) */
   double current_weighted_water_intensity = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
 
@@ -147,26 +157,32 @@ void HostEnvironmentalFootprint::update()
   if (start_time >= finish_time) {
     return;
   }
+  double deltaT = finish_time - start_time;
 
   double instantaneous_power_consumption = sg_host_get_current_consumption(host_);
   
-  double energy_this_step = instantaneous_power_consumption * (finish_time - start_time);
-  double energy_this_step_kwh = energy_this_step / 3.6e6;
+  double energy_this_step = instantaneous_power_consumption * deltaT;
+  double computation_energy_this_step_kwh = energy_this_step / 3.6e6;
+  double total_datacenter_energy_this_step_kwh = computation_energy_this_step_kwh * this->pue_;
 
-  double carbon_this_step = energy_this_step_kwh * this->current_weighted_carbon_intensity;
-  double water_this_step = energy_this_step_kwh * this->current_weighted_water_intensity;
-  double previous_carbon_footprint = this->total_carbon_footprint;
-  double previous_water_footprint = this->total_water_footprint;
-  this->total_carbon_footprint = previous_carbon_footprint + carbon_this_step;
-  this->total_water_footprint = previous_water_footprint + water_this_step;
+  double lifetime_fraction_this_step = (this->host_lifetime_seconds_ > 0.0) ? (deltaT / this->host_lifetime_seconds_) : 0.0;
+
+  double offsite_carbon_footprint = total_datacenter_energy_this_step_kwh * this->current_weighted_carbon_intensity;
+  double embodied_carbon_footprint = this->embodied_carbon_ * lifetime_fraction_this_step;
+  
+  double onsite_water_consumption = computation_energy_this_step_kwh * this->wue_;
+  double offsite_water_consumption = total_datacenter_energy_this_step_kwh * this->current_weighted_water_intensity;
+  double embodied_water_consumption = this->embodied_water_ * lifetime_fraction_this_step;
+
+  this->total_carbon_footprint = this->total_carbon_footprint + offsite_carbon_footprint + embodied_carbon_footprint;
+  this->total_water_footprint = this->total_water_footprint + offsite_water_consumption + onsite_water_consumption + embodied_water_consumption;
 
   this->last_updated = finish_time;
 
   XBT_DEBUG("[update_carbon_footprint of %s] period=[%.8f-%.8f]; instantaneous power=%.2f W;"
-            "total carbon footprint before: %.8f g -> added now: %.8f g;"
-            "total water footprint before: %.8f L -> added now: %.8f g",
+            "total carbon footprint now: %.8f gCO2eq; total water footprint now: %.8f L",
             host_->get_cname(), start_time, finish_time, instantaneous_power_consumption, 
-            previous_carbon_footprint, carbon_this_step, previous_water_footprint, water_this_step);
+            this->total_carbon_footprint, this->total_water_footprint);
 }
 
 HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) : host_(ptr) 
@@ -176,6 +192,26 @@ HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) 
   const char* raw_energy_mix = host_->get_property("energy_mix");
   const char* raw_carbon_intensity = host_->get_property("carbon_intensity");
   const char* raw_water_intensity = host_->get_property("water_intensity");
+
+  const char* raw_pue = host_->get_property("pue");
+  if (raw_pue != nullptr)
+    this->pue_ = std::stod(raw_pue);
+
+  const char* raw_wue = host_->get_property("wue");
+  if (raw_wue != nullptr)
+    this->wue_ = std::stod(raw_wue);
+
+  const char* raw_emb_carbon = host_->get_property("embodied_carbon");
+  if (raw_emb_carbon != nullptr)
+    this->embodied_carbon_ = std::stod(raw_emb_carbon);
+
+  const char* raw_emb_water = host_->get_property("embodied_water");
+  if (raw_emb_water != nullptr)
+    this->embodied_water_ = std::stod(raw_emb_water);
+
+  const char* raw_lifetime = host_->get_property("host_lifetime");
+  if (raw_lifetime != nullptr)
+    this->host_lifetime_seconds_ = std::stod(raw_lifetime);
 
   if (raw_carbon_intensity == nullptr && raw_water_intensity == nullptr) {
     XBT_WARN("Host '%s': Missing values for properties 'carbon_intensity' and 'water_intensity', using default null energy mix.", host_->get_cname());
@@ -301,6 +337,14 @@ void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::strin
   }
 
   this->validate_energy_mix_composition();
+}
+
+void HostEnvironmentalFootprint::set_wue(double new_wue)
+{
+  if (this->last_updated < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
+    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+
+    this->wue_ = new_wue;
 }
 
 HostEnvironmentalFootprint::~HostEnvironmentalFootprint() = default;
@@ -533,4 +577,10 @@ void sg_host_set_water_intensities(const_sg_host_t host, const std::map<std::str
 {
   ensure_plugin_inited();
   host->extension<HostEnvironmentalFootprint>()->set_water_intensities(intensities);
+}
+
+void sg_host_set_wue(const_sg_host_t host, double new_wue)
+{
+  ensure_plugin_inited();
+  host->extension<HostEnvironmentalFootprint>()->set_wue(new_wue);
 }
