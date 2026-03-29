@@ -145,6 +145,7 @@ private:
                         const std::map<std::string, double>& carbon_intensity_map,
                         const std::map<std::string, double>& water_intensity_map);
   void validate_energy_mix_composition();
+  void ensure_up_to_date();
 };
 
 simgrid::xbt::Extension<simgrid::s4u::Host, HostEnvironmentalFootprint> HostEnvironmentalFootprint::EXTENSION_ID;
@@ -230,41 +231,32 @@ HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) 
 
 double HostEnvironmentalFootprint::get_host_carbon_footprint() 
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
-
+  this->ensure_up_to_date();
   return this->total_carbon_footprint_;
 }
 
 double HostEnvironmentalFootprint::get_host_water_footprint() 
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
-
+  this->ensure_up_to_date();
   return this->total_water_footprint_;
 }
 
 double HostEnvironmentalFootprint::get_host_carbon_intensity() 
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
-
+  this->ensure_up_to_date();
   return this->current_weighted_carbon_intensity_;
 }
 
 double HostEnvironmentalFootprint::get_host_water_intensity() 
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
-
+  this->ensure_up_to_date();
   return this->current_weighted_water_intensity_;
 }
 
 
 void HostEnvironmentalFootprint::set_host_energy_mix(const std::map<std::string, EnergySource>& mix)
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+  this->ensure_up_to_date();
 
   this->energy_mix_ = mix;
   this->validate_energy_mix_composition();
@@ -290,8 +282,7 @@ std::string HostEnvironmentalFootprint::get_host_energy_mix_formatted()
 
 void HostEnvironmentalFootprint::set_host_energy_mix_composition(const std::map<std::string, double>& composition)
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+  this->ensure_up_to_date();
 
   // Zero out all existing percentages so stale sources (including NULL_SOURCE
   // from the default mix) don't accumulate alongside the new composition.
@@ -315,8 +306,7 @@ void HostEnvironmentalFootprint::set_host_energy_mix_composition(const std::map<
 
 void HostEnvironmentalFootprint::set_carbon_intensities(const std::map<std::string, double>& intensities) 
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+  this->ensure_up_to_date();
 
   for (const auto& [source_name, intensity] : intensities) {
     if (this->energy_mix_.find(source_name) != this->energy_mix_.end())
@@ -328,8 +318,7 @@ void HostEnvironmentalFootprint::set_carbon_intensities(const std::map<std::stri
 
 void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::string, double>& intensities) 
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+  this->ensure_up_to_date();
 
   for (const auto& [source_name, intensity] : intensities) {
     if (this->energy_mix_.find(source_name) != this->energy_mix_.end())
@@ -341,10 +330,9 @@ void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::strin
 
 void HostEnvironmentalFootprint::set_wue(double new_wue)
 {
-  if (this->last_updated_ < simgrid::s4u::Engine::get_clock()) // We need to simcall this as it modifies the environment
-    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
+  this->ensure_up_to_date();
 
-    this->wue_ = new_wue;
+  this->wue_ = new_wue;
 }
 
 HostEnvironmentalFootprint::~HostEnvironmentalFootprint() = default;
@@ -415,9 +403,14 @@ void HostEnvironmentalFootprint::validate_energy_mix_composition()
     new_weighted_water_intensity += (source_info.water_intensity * source_info.percentage) / 100.0;
   }
 
-
   this->current_weighted_carbon_intensity_ = new_weighted_carbon_intensity;
   this->current_weighted_water_intensity_ = new_weighted_water_intensity;
+}
+
+void HostEnvironmentalFootprint::ensure_up_to_date() 
+{
+  if (this->last_updated_ < simgrid::s4u::Engine::get_clock())
+    simgrid::kernel::actor::simcall_answered(std::bind(&HostEnvironmentalFootprint::update, this));
 }
 
 
