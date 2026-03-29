@@ -1,140 +1,237 @@
-# Validation of the SimGrid CO2 emissions plugin
+# Validation of the SimGrid Environmental Footprint Plugin (v2)
 
-This document describes how we validated our plugin to compute the emissions from electricity consumption of machines in SimGrid. We consider static and dynamic values for the input static of grid electricity emissions values (to represent for instance the variability caused by using intermittent renewable sources), and we validate for the following scenarios:
+This document describes how we validated our plugin to compute the **carbon emissions** and **water consumption** from electricity usage of machines in SimGrid. The model now accounts for three components:
 
-- Machines off;
-- Machines idle;
+1. **Off-site footprint** — emissions and water used at power plants to generate electricity, scaled by PUE
+2. **On-site water consumption** — water used for datacenter cooling (WUE)
+3. **Embodied footprint** — carbon and water embedded in hardware manufacturing, amortized over the host's lifetime
+
+We consider static and dynamic values for grid electricity emissions (to represent the variability caused by using intermittent renewable sources), and we validate for the following scenarios:
+
+- Machines off
+- Machines idle
 - Performing computations
+
 ---
 
 ## Inputs
-We use homogeneous machines with the following hardware properties: 
+
+### Hardware Properties
+
+We use homogeneous machines with the following power profile:
 
 | CPU cores used | Power (W) |
-|------------------|-----------|
-| 1 core           | 125 W     |
-| 2 cores          | 150 W     |
-| 3 cores          | 175 W     |
-| 4 cores          | 200 W     |
-
+| --- | --- |
+| 1 core | 125 W |
+| 2 cores | 150 W |
+| 3 cores | 175 W |
+| 4 cores | 200 W |
 | State | Power (W) |
-|-------|-----------|
-| Idle  | 100 W     |
-| Off   | 5 W       |
+| --- | --- |
+| Idle | 100 W |
+| Off | 5 W |
 
-**Note:** Our plugin extends SimGrid’s energy plugin, which has been validated on both homogeneous and heterogeneous platforms. Although the scenarios below consider only homogeneous machines, the plugin also supports heterogeneous machines.
+**Note:** Our plugin extends SimGrid's energy plugin, which has been validated on both homogeneous and heterogeneous platforms. Although the scenarios below consider only homogeneous machines, the plugin also supports heterogeneous machines.
 
----
-## Carbon-Intensity Data
+### Datacenter Parameters
 
-We consider three grid locations, and use data provided by [ElectricityMap](https://www.electricitymaps.com/) data:
+| Parameter | Value | Description |
+| --- | --- | --- |
+| **PUE** | 1.2 | Power Usage Effectiveness — ratio of total facility energy to IT equipment energy |
+| **WUE** | 1.8 L/kWh | Water Usage Effectiveness — on-site cooling water per kWh of IT energy |
+| **Embodied Carbon** | 1,000,000 gCO₂ | Total CO₂ embedded in host manufacturing |
+| **Embodied Water** | 50,000 L | Total water embedded in host manufacturing |
+| **Host Lifetime** | 5 years (157,680,000 s) | Expected useful life of the server |
 
-- **USA** —    higher carbon intensity, low share of renewable sources in the electricity grid.
-- **Brazil** — intermediate carbon intensity, has a presence of renewables, such as hydroelectric power
-- **France** — lower carbon intensity, due to nuclear power
+### Model Equations
 
+For each simulation time step *dt*:
 
----
-# Validation scenarios
+- $E_{IT}$ = energy consumed by the host (from SimGrid's energy plugin)
+- $E_{total} = E_{IT} \times PUE$ (total datacenter energy including cooling overhead)
+- $\text{Carbon}_{offsite} = E_{total} \times CI$ (CO₂ from power generation)
+- $\text{Water}_{onsite} = E_{IT} \times WUE$ (cooling water)
+- $\text{Water}_{offsite} = E_{total} \times WI$ (water used in power generation)
+- $\text{Embodied}_{carbon} = \text{embodied\_carbon} \times \frac{dt}{\text{host\_lifetime}}$
+- $\text{Embodied}_{water} = \text{embodied\_water} \times \frac{dt}{\text{host\_lifetime}}$
 
-All scenarios use a **10‑hour time horizon**.
-
----
-
-# 1. Static CO₂ Scenarios
-
-## 1.1 Machine Off (USA grid, carbon intensity = 390.0231 gCO2/kWh)
-
-- E_J = 5 W  (power when off) * 3600 (seconds in one hour) * 10 (hours in the time horizon) = 180000  J
-- E_kWh = 180000 / 3600000 = 0.05 kWh
-
-- **Expected emissions:**  0.05 * 390.0231 = **19.501155 g** CO2
-- **Expected water consumption:**  0.05 * 1,8887756 = **0.094439 L**
+Where *CI* is the weighted carbon intensity (gCO₂/kWh) and *WI* is the weighted water intensity (L/kWh) of the energy mix.
 
 ---
 
-## 1.2 Machine Idle (France grid, carbon intensity = 28.3792 gCO2/kWh)
+## Carbon-Intensity & Water-Intensity Data
 
-- Power idle = 100 W
-- E_J = 100 * 3600 * 10 = 3600000 J
-- E_kWh = 1.0 kWh
-- **Expected emissions:** 1.0 * 28.3792 = **28.3792 gCO2**
-- **Expected water consumption:** 1.0 * 3.740154 = *3.740154 L**
+We consider three grid locations, using data from [Electricity Maps](https://www.electricitymaps.com/):
 
----
+| Location | CI (gCO₂/kWh) | WI (L/kWh) | Characteristics |
+| --- | --- | --- | --- |
+| **USA** | 390.0231 | 1.8888 | Higher carbon intensity, low renewables |
+| **France** | 28.3792 | 3.7402 | Lower carbon intensity (nuclear) |
+| **Brazil** | 69.1152 | 11.8376 | Intermediate (hydroelectric) |
 
-## 1.3 Machine Running Tasks (Brazil grid, carbon intensity = 69.1152 gCO2/kWh)
+### Embodied Footprint (10-hour horizon)
 
-We evaluate running tasks using all the cores in the machine in the following 4 scenarios:
-- A : running computations using 1 CPU core for 1 hour
-- B : running computations using 2 CPU cores for 2 hours
-- C : running computations using 3 CPU cores for 3 hours
-- D : running computations using 4 CPU cores for 4 hours
+For all scenarios with a 10-hour time horizon:
 
-| Scenarios | Cores | Power (W) | Duration (h) | Energy (kWh) | CO₂ (g) | H₂O (L) |
-|---------|-------|-----------|--------------|--------------|---------|------------|
-| A       | 1     | 125       | 1            | 0.125        | 8.6394  | 1.4797  |
-| B       | 2     | 150       | 2            | 0.300        | 20.73456  | 3.5512  |
-| C       | 3     | 175       | 3            | 0.525        | 36.28548  | 6.2147  |
-| D       | 4     | 200       | 4            | 0.800        | 55.29216  | 9.4701  |
-| **Total** | —   | —         | 10           | **1.750**    | **120.9516** | **20.715916** |
+- $\text{lifetime\_fraction} = \frac{36{,}000 \text{ s}}{157{,}680{,}000 \text{ s}} = 0.000228311$
+- $\text{Embodied carbon (10h)} = 1{,}000{,}000 \times 0.000228311 = \textbf{228.31 gCO₂}$
+- $\text{Embodied water (10h)} = 50{,}000 \times 0.000228311 = \textbf{11.42 L}$
 
+These values are **constant across all 10-hour scenarios**, since embodied amortization depends only on elapsed time.
 
 ---
 
-# 2. Dynamic CO2 Scenarios
+# Validation Scenarios
 
-In these scenarios, the carbon intensity varies hourly.
-
----
-
-## 2.1 Machine Off — using hourly carbon intensity from USA 
-
-Power = 5 W  = 0.005 kWh/hour.
-
-| Hour | CI (gCO₂/kWh) | Energy (kWh) | Hourly CO₂ (g) |
-|-----:|--------------:|-------------:|---------------:|
-| 1 | 453.54 | 0.005 | 2.2677 |
-| 2 | 441.48 | 0.005 | 2.2074 |
-| 3 | 437.93 | 0.005 | 2.1897 |
-| 4 | 437.61 | 0.005 | 2.1881 |
-| 5 | 442.29 | 0.005 | 2.2115 |
-| 6 | 447.18 | 0.005 | 2.2359 |
-| 7 | 452.04 | 0.005 | 2.2602 |
-| 8 | 453.96 | 0.005 | 2.2698 |
-| 9 | 455.13 | 0.005 | 2.2757 |
-| 10 | 457.54 | 0.005 | 2.2877 |
-| **Total** | — | **0.05** | **22.3935 gCO₂** |
+All scenarios use a **10-hour time horizon**.
 
 ---
 
-## 2.2 Machine Idle — using hourly carbon intensity from France 
+# 1. Static Scenarios
 
-Power = 100 W = 0.1 kWh/hour.
+## 1.1 Machine Off (USA grid)
 
-| Hour | CI (gCO₂/kWh) | Energy (kWh) | Hourly CO₂ (g) |
-|-----:|--------------:|-------------:|---------------:|
-| 1 | 29.09 | 0.1 | 2.909 |
-| 2 | 30.08 | 0.1 | 3.008 |
-| 3 | 32.33 | 0.1 | 3.233 |
-| 4 | 32.96 | 0.1 | 3.296 |
-| 5 | 33.00 | 0.1 | 3.300 |
-| 6 | 33.41 | 0.1 | 3.341 |
-| 7 | 34.52 | 0.1 | 3.452 |
-| 8 | 33.63 | 0.1 | 3.363 |
-| 9 | 32.17 | 0.1 | 3.217 |
-| 10 | 31.95 | 0.1 | 3.195 |
-| **Total** | — | **1.0** | **32.314 gCO₂** |
+**Parameters:** Power = 5 W, CI = 390.0231 gCO₂/kWh, WI = 1.8888 L/kWh
+
+- $E_{IT} = 5 \text{ W} \times 10 \text{ h} = 50 \text{ Wh} = 0.05 \text{ kWh}$
+- $E_{total} = 0.05 \times 1.2 = 0.06 \text{ kWh}$
+
+| Component | Formula | Value |
+| --- | --- | --- |
+| Carbon (off-site) | 0.06 × 390.0231 | **23.4014 g** |
+| Water (on-site) | 0.05 × 1.8 | **0.0900 L** |
+| Water (off-site) | 0.06 × 1.8888 | **0.1133 L** |
+| Carbon (embodied) | 228.31 | **228.31 g** |
+| Water (embodied) | 11.42 | **11.42 L** |
+| **Total Carbon** |  | **251.71 g** |
+| **Total Water** |  | **11.62 L** |
 
 ---
 
-## 2.3 Machine Running Tasks — using hourly carbon intensity from  Brazil 
+## 1.2 Machine Idle (France grid)
+
+**Parameters:** Power = 100 W, CI = 28.3792 gCO₂/kWh, WI = 3.7402 L/kWh
+
+- $E_{IT} = 100 \text{ W} \times 10 \text{ h} = 1.0 \text{ kWh}$
+- $E_{total} = 1.0 \times 1.2 = 1.2 \text{ kWh}$
+
+| Component | Formula | Value |
+| --- | --- | --- |
+| Carbon (off-site) | 1.2 × 28.3792 | **34.0550 g** |
+| Water (on-site) | 1.0 × 1.8 | **1.8000 L** |
+| Water (off-site) | 1.2 × 3.7402 | **4.4882 L** |
+| Carbon (embodied) | 228.31 | **228.31 g** |
+| Water (embodied) | 11.42 | **11.42 L** |
+| **Total Carbon** |  | **262.37 g** |
+| **Total Water** |  | **17.71 L** |
+
+---
+
+## 1.3 Machine Running Tasks (Brazil grid)
+
+**Parameters:** CI = 69.1152 gCO₂/kWh, WI = 11.8376 L/kWh
+
+We evaluate 4 sequential task segments:
+
+- A: 1 CPU core for 1 hour
+- B: 2 CPU cores for 2 hours
+- C: 3 CPU cores for 3 hours
+- D: 4 CPU cores for 4 hours
+
+| Scenario | Cores | Power (W) | Duration (h) | E_IT (kWh) | E_total (kWh) | CO₂ off-site (g) | H₂O on-site (L) | H₂O off-site (L) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A | 1 | 125 | 1 | 0.125 | 0.150 | 10.367 | 0.225 | 1.776 |
+| B | 2 | 150 | 2 | 0.300 | 0.360 | 24.882 | 0.540 | 4.262 |
+| C | 3 | 175 | 3 | 0.525 | 0.630 | 43.543 | 0.945 | 7.458 |
+| D | 4 | 200 | 4 | 0.800 | 0.960 | 66.351 | 1.440 | 11.364 |
+| **Total** | — | — | 10 | **1.750** | **2.100** | **145.142** | **3.150** | **24.859** |
+
+**Adding embodied footprint (10h):**
+
+| Component | Value |
+| --- | --- |
+| CO₂ off-site | 145.14 g |
+| CO₂ embodied | 228.31 g |
+| **Total CO₂** | **373.45 g** |
+| H₂O on-site | 3.15 L |
+| H₂O off-site | 24.86 L |
+| H₂O embodied | 11.42 L |
+| **Total H₂O** | **39.43 L** |
+
+---
+
+# 2. Dynamic Scenarios
+
+In these scenarios, the carbon intensity varies hourly. WUE and PUE remain constant.
+
+---
+
+## 2.1 Machine Off — Hourly CI from USA
+
+Power = 5 W → $E_{IT}/h = 0.005$ kWh → $E_{total}/h = 0.006$ kWh
+
+| Hour | CI (gCO₂/kWh) |
+| --- | --- |
+| 1 | 453.54 |
+| 2 | 441.48 |
+| 3 | 437.93 |
+| 4 | 437.61 |
+| 5 | 442.29 |
+| 6 | 447.18 |
+| 7 | 452.04 |
+| 8 | 453.96 |
+| 9 | 455.13 |
+| 10 | 457.54 |
+| **Subtotal** | — |
+| Component | Value |
+| --- | --- |
+| CO₂ off-site | 26.87 g |
+| CO₂ embodied | 228.31 g |
+| **Total CO₂** | **255.18 g** |
+| H₂O on-site | 0.09 L |
+| H₂O off-site | 0.11 L |
+| H₂O embodied | 11.42 L |
+| **Total H₂O** | **11.62 L** |
+
+---
+
+## 2.2 Machine Idle — Hourly CI from France
+
+Power = 100 W → $E_{IT}/h = 0.1$ kWh → $E_{total}/h = 0.12$ kWh
+
+| Hour | CI (gCO₂/kWh) |
+| --- | --- |
+| 1 | 29.09 |
+| 2 | 30.08 |
+| 3 | 32.33 |
+| 4 | 32.96 |
+| 5 | 33.00 |
+| 6 | 33.41 |
+| 7 | 34.52 |
+| 8 | 33.63 |
+| 9 | 32.17 |
+| 10 | 31.95 |
+| **Subtotal** | — |
+| Component | Value |
+| --- | --- |
+| CO₂ off-site | 38.78 g |
+| CO₂ embodied | 228.31 g |
+| **Total CO₂** | **267.09 g** |
+| H₂O on-site | 1.80 L |
+| H₂O off-site | 4.49 L |
+| H₂O embodied | 11.42 L |
+| **Total H₂O** | **17.71 L** |
+
+---
+
+## 2.3 Machine Running Tasks — Hourly CI from Brazil
 
 Power consumption varies by active core count (same as Section 1.3).
 
 ### Hourly Carbon Intensities
+
 | Hour | CI (gCO₂/kWh) |
-|-----:|--------------:|
+| --- | --- |
 | 1 | 100.07 |
 | 2 | 93.60 |
 | 3 | 93.89 |
@@ -148,12 +245,54 @@ Power consumption varies by active core count (same as Section 1.3).
 
 ### Energy & Emissions by Task Segment
 
-| Scenarios | Cores | Hours Covered | Power (W) | Energy (kWh/hour)  | CO₂ (g) Calc |
-|---------|-------|---------------|-----------|-------------------|---------------|
-| A | 1 | 1 | 125 | 0.125 | 0.125 × 100.07 = 12.50875 |
-| B | 2 | 2, 3| 150 | 0.150 | 0.15 × (93.60 + 93.89) = 28.12350 |
-| C | 3 | 4, 5, 6  | 175 | 0.175 |  0.175 × (96.04 + 95.00 + 94.40) = 49.95200 |
-| D | 4 | 7, 8, 9, 10| 200 | 0.200 |  0.20 × (94.11 + 94.99 + 96.44 + 99.76) = 77.06000 |
-| **Total** | — | 10 h | — | **1.750 kWh** |  **167.64425 gCO₂** |
+| Scenario | Cores | Hours | Power (W) | E_IT/h (kWh) | E_total/h (kWh) | CO₂ off-site (g) | H₂O on-site (L) | H₂O off-site (L) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A | 1 | 1 | 125 | 0.125 | 0.150 | 0.15 × 100.07 = **15.011** | 0.225 | 1.776 |
+| B | 2 | 2–3 | 150 | 0.150 | 0.180 | 0.18 × (93.60 + 93.89) = **33.748** | 0.540 | 4.262 |
+| C | 3 | 4–6 | 175 | 0.175 | 0.210 | 0.21 × (96.04 + 95.00 + 94.40) = **59.942** | 0.945 | 7.458 |
+| D | 4 | 7–10 | 200 | 0.200 | 0.240 | 0.24 × (94.11 + 94.99 + 96.44 + 99.76) = **92.472** | 1.440 | 11.364 |
+| **Subtotal** | — | 10 h | — | **1.750** | **2.100** | **201.173** | **3.150** | **24.859** |
+
+### Final Totals (with embodied)
+
+| Component | Value |
+| --- | --- |
+| CO₂ off-site | 201.17 g |
+| CO₂ embodied | 228.31 g |
+| **Total CO₂** | **429.48 g** |
+| H₂O on-site | 3.15 L |
+| H₂O off-site | 24.86 L |
+| H₂O embodied | 11.42 L |
+| **Total H₂O** | **39.43 L** |
 
 ---
+
+# Summary: Impact of Extended Model
+
+The table below compares the original model (off-site only, no PUE) with the extended model:
+
+| Scenario | CO₂ (original) | CO₂ (extended) | Δ CO₂ | H₂O (original) | H₂O (extended) | Δ H₂O |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.1 Off (USA, static) | 19.50 g | 251.71 g | +1190% | 0.09 L | 11.62 L | +12811% |
+| 1.2 Idle (France, static) | 28.38 g | 262.37 g | +824% | 3.74 L | 17.71 L | +373% |
+| 1.3 Tasks (Brazil, static) | 120.95 g | 373.45 g | +209% | 20.72 L | 39.43 L | +90% |
+| 2.1 Off (USA, dynamic) | 22.39 g | 255.18 g | +1040% | — | 11.62 L | — |
+| 2.2 Idle (France, dynamic) | 32.31 g | 267.09 g | +727% | — | 17.71 L | — |
+| 2.3 Tasks (Brazil, dynamic) | 167.64 g | 429.48 g | +156% | — | 39.43 L | — |
+
+<aside>
+💡
+
+**Key insight:** The embodied footprint dominates in low-utilization scenarios (machine off/idle), while the PUE overhead becomes more significant in compute-heavy scenarios. This highlights the importance of maximizing server utilization to amortize the embodied cost effectively.
+
+</aside>
+
+---
+
+# Notes
+
+- **PUE** is treated as constant (1.2) across all scenarios. In practice, PUE can vary with ambient temperature.
+- **WUE** is treated as constant (1.8 L/kWh) here, but the plugin supports dynamic updates via `sg_host_set_wue()` to model variation with wet-bulb temperature.
+- **Embodied values** (1 tonne CO₂, 50,000 L) are illustrative examples. Real values should be sourced from manufacturer LCA reports or frameworks like iMec.
+- **Water intensity** (WI) represents the *off-site* water footprint of power generation (EWIF in BluePulse terminology), not cooling water.
+- The dynamic scenarios (Section 2) currently only vary carbon intensity hourly. A more complete validation could also vary WUE hourly based on meteorological traces.
