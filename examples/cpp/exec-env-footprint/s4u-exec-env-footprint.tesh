@@ -5,8 +5,8 @@ p Testing the mechanism for computing host emissions
 $ ${bindir:=.}/s4u-exec-env-footprint ${platfdir}/emission_platform.xml
 > [36000.000000] [host_energy/INFO] Total energy consumption: 10080000.000000 Joules (used hosts: 6300000.000000 Joules; unused/idle hosts: 3780000.000000)
 > [36000.000000] [host_energy/INFO] Energy consumption of host host_br_static_co2: 6300000.000000 Joules
-> [36000.000000] [host_environmental_footprint/INFO] Host host_br_static_co2: Carbon emitted by host: 120.951600 g. Water consumed by host: 20.715916 L.
+> [36000.000000] [host_environmental_footprint/INFO] Host host_br_static_co2: Carbon emitted by host: 373.452422 g. Water consumed by host: 39.424625 L.
 > [36000.000000] [host_energy/INFO] Energy consumption of host host_fr_static_co2: 3600000.000000 Joules
-> [36000.000000] [host_environmental_footprint/INFO] Host host_fr_static_co2: Carbon emitted by host: 28.379200 g. Water consumed by host: 3.740154 L.
+> [36000.000000] [host_environmental_footprint/INFO] Host host_fr_static_co2: Carbon emitted by host: 262.365542 g. Water consumed by host: 17.703710 L.
 > [36000.000000] [host_energy/INFO] Energy consumption of host host_usa_static_co2: 180000.000000 Joules
-> [36000.000000] [host_environmental_footprint/INFO] Host host_usa_static_co2: Carbon emitted by host: 19.501155 g. Water consumed by host: 0.094439 L.
+> [36000.000000] [host_environmental_footprint/INFO] Host host_usa_static_co2: Carbon emitted by host: 251.711888 g. Water consumed by host: 11.618852 L.
