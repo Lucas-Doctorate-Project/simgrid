@@ -122,7 +122,6 @@ private:
   simgrid::s4u::Host* host_ = nullptr;
 
   double last_updated_ = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
-  double total_used_energy_;  /*< Amount of energy used so far (kwh) >*/
   
   std::map<std::string, EnergySource> energy_mix_; /*< Energy sources making up the carbon emission mix */
   const std::map<std::string, EnergySource> default_energy_mix_ = {{"NULL_SOURCE", EnergySource{100.0, 0.0, 0.0}}}; /*< Default energy mix if none is provided */
@@ -132,7 +131,7 @@ private:
 
   double embodied_carbon_ = 0.0;  // total gCO2 embodied in host production 
   double embodied_water_  = 0.0;  // total L embodied in host production
-  double host_lifetime_seconds_  = 0.0;  // total L embodied in host production
+  double host_lifetime_seconds_  = 0.0;  // Expected useful life of the host (seconds)
 
   double total_carbon_footprint_ = 0.0; /* Total CO2 emitted to produce the energy used by the host */ 
   double total_water_footprint_ = 0.0; /* Total water used to produce the energy used by the host */
@@ -188,8 +187,6 @@ void HostEnvironmentalFootprint::update()
 
 HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) : host_(ptr) 
 {
-  this->total_used_energy_ = sg_host_get_consumed_energy(host_);
-
   const char* raw_energy_mix = host_->get_property("energy_mix");
   const char* raw_carbon_intensity = host_->get_property("carbon_intensity");
   const char* raw_water_intensity = host_->get_property("water_intensity");
