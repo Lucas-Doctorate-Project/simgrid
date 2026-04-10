@@ -49,13 +49,13 @@ For each simulation time step *dt*:
 
 - $E_{IT}$ = energy consumed by the host (from SimGrid's energy plugin)
 - $E_{total} = E_{IT} \times PUE$ (total datacenter energy including cooling overhead)
+- $CI$ = Weighted carbon intensity of the energy mix, in $gCO_{2}eq/kWh$
 - $\text{Carbon}_{offsite} = E_{total} \times CI$ (CO₂ from power generation)
+- $WI$ = Weighted water intensity of the energy mix, in $L/kWh$
 - $\text{Water}_{onsite} = E_{IT} \times WUE$ (cooling water)
 - $\text{Water}_{offsite} = E_{total} \times WI$ (water used in power generation)
 - $\text{Embodied}_{carbon} = \text{embodied\_carbon} \times \frac{dt}{\text{host\_lifetime}}$
 - $\text{Embodied}_{water} = \text{embodied\_water} \times \frac{dt}{\text{host\_lifetime}}$
-
-Where *CI* is the weighted carbon intensity (gCO₂/kWh) and *WI* is the weighted water intensity (L/kWh) of the energy mix.
 
 ---
 
