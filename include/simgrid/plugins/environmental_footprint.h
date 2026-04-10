@@ -27,11 +27,6 @@ XBT_PUBLIC double sg_host_get_carbon_footprint(const_sg_host_t host);
 XBT_PUBLIC double sg_host_get_water_footprint(const_sg_host_t host);
 XBT_PUBLIC double sg_host_get_carbon_intensity(const_sg_host_t host);
 XBT_PUBLIC double sg_host_get_water_intensity(const_sg_host_t host);
-XBT_PUBLIC void sg_host_set_energy_mix(const_sg_host_t host, const std::map<std::string, EnergySource>& mix);
-XBT_PUBLIC std::string sg_host_get_energy_mix_formatted(const_sg_host_t host);
-XBT_PUBLIC void sg_host_set_energy_mix_composition(const_sg_host_t host, const std::map<std::string, double>& composition);
-XBT_PUBLIC void sg_host_set_carbon_intensities(const_sg_host_t host, const std::map<std::string, double>& intensities);
-XBT_PUBLIC void sg_host_set_water_intensities(const_sg_host_t host, const std::map<std::string, double>& intensities);
 XBT_PUBLIC void sg_host_set_wue(const_sg_host_t host, double new_wue);
 
 SG_END_DECL

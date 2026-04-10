@@ -111,20 +111,12 @@ public:
   double get_host_carbon_intensity();
   double get_host_water_intensity();
   double get_last_update_time() const { return last_updated_; }
-  void set_host_energy_mix(const std::map<std::string, EnergySource>& mix);
-  std::string get_host_energy_mix_formatted();
-  void set_host_energy_mix_composition(const std::map<std::string, double>& composition);
-  void set_carbon_intensities(const std::map<std::string, double>& intensities);
-  void set_water_intensities(const std::map<std::string, double>& intensities);
   void set_wue(double new_wue);
   void update();
 private:
   simgrid::s4u::Host* host_ = nullptr;
 
   double last_updated_ = simgrid::s4u::Engine::get_clock(); /*< Timestamp of the last update event*/
-  
-  std::map<std::string, EnergySource> energy_mix_; /*< Energy sources making up the carbon emission mix */
-  const std::map<std::string, EnergySource> default_energy_mix_ = {{"NULL_SOURCE", EnergySource{100.0, 0.0, 0.0}}}; /*< Default energy mix if none is provided */
   
   double pue_ = 1.0;           // Power Usage Effectiveness (default: ideal)
   double wue_ = 0.0;           // Water Usage Effectiveness (L/kWh) - on-site cooling
@@ -136,14 +128,9 @@ private:
   double total_carbon_footprint_ = 0.0; /* Total CO2 emitted to produce the energy used by the host */ 
   double total_water_footprint_ = 0.0; /* Total water used to produce the energy used by the host */
   
-  double current_weighted_carbon_intensity_ = 0.0; /* Current weighted carbon intensity of the energy mix (g CO2/kWh) */
-  double current_weighted_water_intensity_ = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
+  double carbon_intensity_ = 0.0; /* Current weighted carbon intensity of the energy mix (g CO2/kWh) */
+  double water_intensity_ = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
 
-  std::map<std::string, double> parse_string_into_map(const char* input_cstr);
-  void build_energy_mix(const std::map<std::string, double>& energy_percentage_map,
-                        const std::map<std::string, double>& carbon_intensity_map,
-                        const std::map<std::string, double>& water_intensity_map);
-  void validate_energy_mix_composition();
   void ensure_up_to_date();
 };
 
@@ -167,11 +154,11 @@ void HostEnvironmentalFootprint::update()
 
   double lifetime_fraction_this_step = (this->host_lifetime_seconds_ > 0.0) ? (deltaT / this->host_lifetime_seconds_) : 0.0;
 
-  double offsite_carbon_footprint = total_datacenter_energy_this_step_kwh * this->current_weighted_carbon_intensity_;
+  double offsite_carbon_footprint = total_datacenter_energy_this_step_kwh * this->carbon_intensity_;
   double embodied_carbon_footprint = this->embodied_carbon_ * lifetime_fraction_this_step;
   
   double onsite_water_consumption = computation_energy_this_step_kwh * this->wue_;
-  double offsite_water_consumption = total_datacenter_energy_this_step_kwh * this->current_weighted_water_intensity_;
+  double offsite_water_consumption = total_datacenter_energy_this_step_kwh * this->water_intensity_;
   double embodied_water_consumption = this->embodied_water_ * lifetime_fraction_this_step;
 
   this->total_carbon_footprint_ = this->total_carbon_footprint_ + offsite_carbon_footprint + embodied_carbon_footprint;
@@ -187,10 +174,14 @@ void HostEnvironmentalFootprint::update()
 
 HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) : host_(ptr) 
 {
-  const char* raw_energy_mix = host_->get_property("energy_mix");
   const char* raw_carbon_intensity = host_->get_property("carbon_intensity");
-  const char* raw_water_intensity = host_->get_property("water_intensity");
+  if (raw_carbon_intensity != nullptr)
+    this->carbon_intensity_ = std::stod(raw_carbon_intensity);
 
+  const char* raw_water_intensity = host_->get_property("water_intensity");
+  if (raw_water_intensity != nullptr)
+    this->water_intensity_ = std::stod(raw_water_intensity);
+  
   const char* raw_pue = host_->get_property("pue");
   if (raw_pue != nullptr)
     this->pue_ = std::stod(raw_pue);
@@ -211,19 +202,8 @@ HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) 
   if (raw_lifetime != nullptr)
     this->host_lifetime_seconds_ = std::stod(raw_lifetime);
 
-  if (raw_carbon_intensity == nullptr && raw_water_intensity == nullptr) {
-    XBT_WARN("Host '%s': Missing values for properties 'carbon_intensity' and 'water_intensity', using default null energy mix.", host_->get_cname());
-    this->energy_mix_ = this->default_energy_mix_; // Default to 0 g/kWh and 0 L/kWh if not provided
-  } else {
-    std::map<std::string, double> energy_percentage_map = this->parse_string_into_map(raw_energy_mix);
-    std::map<std::string, double> carbon_intensity_map = this->parse_string_into_map(raw_carbon_intensity);
-    std::map<std::string, double> water_intensity_map = this->parse_string_into_map(raw_water_intensity);
-
-    this->build_energy_mix(energy_percentage_map, carbon_intensity_map, water_intensity_map);
-    this->validate_energy_mix_composition();
-  }
-
-  XBT_DEBUG("Creating HostEnvironmentalFootprint for host %s with the following energy mix configuration: \n%s.", host_->get_cname(), this->get_host_energy_mix_formatted().c_str());
+  XBT_DEBUG("Creating HostEnvironmentalFootprint for host %s with the following energy mix configuration: \nCarbon intensity: %.2f gCO2/kWh; Water intensity: %.2f L/kWh.",
+            host_->get_cname(), this->carbon_intensity_, this->water_intensity_);
 }
 
 double HostEnvironmentalFootprint::get_host_carbon_footprint() 
@@ -241,88 +221,13 @@ double HostEnvironmentalFootprint::get_host_water_footprint()
 double HostEnvironmentalFootprint::get_host_carbon_intensity() 
 {
   this->ensure_up_to_date();
-  return this->current_weighted_carbon_intensity_;
+  return this->carbon_intensity_;
 }
 
 double HostEnvironmentalFootprint::get_host_water_intensity() 
 {
   this->ensure_up_to_date();
-  return this->current_weighted_water_intensity_;
-}
-
-
-void HostEnvironmentalFootprint::set_host_energy_mix(const std::map<std::string, EnergySource>& mix)
-{
-  this->ensure_up_to_date();
-
-  this->energy_mix_ = mix;
-  this->validate_energy_mix_composition();
-}
-
-std::string HostEnvironmentalFootprint::get_host_energy_mix_formatted() 
-{
-  std::stringstream ss;  
-  
-  ss << std::fixed << std::setprecision(2);
-
-    for (const auto& entry : this->energy_mix_) {
-        const std::string& source_name = entry.first;
-        double percentage = entry.second.percentage;
-        double carbon_footprint = entry.second.carbon_intensity;
-        double water_footprint = entry.second.water_intensity;
-
-        ss << source_name << ": "<< carbon_footprint << " gCO2/kWh, " << water_footprint << " L/kWh, (" << percentage << "%)\n"; 
-    }
-
-    return ss.str();
-}
-
-void HostEnvironmentalFootprint::set_host_energy_mix_composition(const std::map<std::string, double>& composition)
-{
-  this->ensure_up_to_date();
-
-  // Zero out all existing percentages so stale sources (including NULL_SOURCE
-  // from the default mix) don't accumulate alongside the new composition.
-  for (auto& [source_name, source_info] : this->energy_mix_)
-    source_info.percentage = 0.0;
-
-  for (const auto& [source_name, percentage] : composition) {
-    if (this->energy_mix_.find(source_name) != this->energy_mix_.end()) {
-      this->energy_mix_[source_name].percentage = percentage;
-    } else {
-      EnergySource source_info;
-      source_info.percentage = percentage;
-      source_info.carbon_intensity = 0.0;
-      source_info.water_intensity = 0.0;
-      this->energy_mix_[source_name] = source_info;
-    }
-  }
-
-  this->validate_energy_mix_composition();
-}
-
-void HostEnvironmentalFootprint::set_carbon_intensities(const std::map<std::string, double>& intensities) 
-{
-  this->ensure_up_to_date();
-
-  for (const auto& [source_name, intensity] : intensities) {
-    if (this->energy_mix_.find(source_name) != this->energy_mix_.end())
-      this->energy_mix_[source_name].carbon_intensity = intensity;
-  }
-
-  this->validate_energy_mix_composition();
-}
-
-void HostEnvironmentalFootprint::set_water_intensities(const std::map<std::string, double>& intensities) 
-{
-  this->ensure_up_to_date();
-
-  for (const auto& [source_name, intensity] : intensities) {
-    if (this->energy_mix_.find(source_name) != this->energy_mix_.end())
-      this->energy_mix_[source_name].water_intensity = intensity;
-  }
-
-  this->validate_energy_mix_composition();
+  return this->water_intensity_;
 }
 
 void HostEnvironmentalFootprint::set_wue(double new_wue)
@@ -334,75 +239,6 @@ void HostEnvironmentalFootprint::set_wue(double new_wue)
 
 HostEnvironmentalFootprint::~HostEnvironmentalFootprint() = default;
 
-std::map<std::string, double> HostEnvironmentalFootprint::parse_string_into_map(const char* input_cstr) 
-{
-  std::map<std::string, double> result;
-  if (input_cstr == nullptr) return result;
-
-  std::string input(input_cstr);
-  std::stringstream input_stream(input);
-  std::string entry;
-
-  while (std::getline(input_stream, entry, ';')) {
-    std::stringstream entry_stream(entry);
-    std::string key;
-    std::string val_str;
-
-    if (std::getline(entry_stream, key, ':') && std::getline(entry_stream, val_str)) {
-      try {
-        result[key] = std::stod(val_str);
-      } catch (...) {
-        XBT_WARN("Failed to parse value for '%s'.", key.c_str());
-      }
-    }
-  }
-  return result;
-}
-
-void HostEnvironmentalFootprint::build_energy_mix(const std::map<std::string, double>& energy_percentage_map,
-                      const std::map<std::string, double>& carbon_intensity_map,
-                      const std::map<std::string, double>& water_intensity_map)
-{
-  for (const auto& [source_name, percentage] : energy_percentage_map) {
-    double carbon_intensity = 0.0, water_intensity = 0.0;
-
-    auto carbon_it = carbon_intensity_map.find(source_name);
-    if (carbon_it != carbon_intensity_map.end()) {
-      carbon_intensity = carbon_it->second;
-    } else {
-      XBT_WARN("Warning: Missing carbon intensity for source '%s' on host '%s'. Using 0 g/kWh.", source_name.c_str(), host_->get_cname());
-    }
-
-    auto water_it = water_intensity_map.find(source_name);
-    if (water_it != water_intensity_map.end()) {
-      water_intensity = water_it->second;
-    } else {
-      XBT_WARN("Warning: Missing water intensity for source '%s' on host '%s'. Using 0 L/kWh.", source_name.c_str(), host_->get_cname());
-    }
-
-    EnergySource source_info;
-    source_info.percentage = percentage;
-    source_info.carbon_intensity = carbon_intensity;
-    source_info.water_intensity = water_intensity;
-
-    this->energy_mix_[source_name] = source_info;
-  }
-}
-
-void HostEnvironmentalFootprint::validate_energy_mix_composition()
-{
-  double new_weighted_carbon_intensity = 0.0;
-  double new_weighted_water_intensity = 0.0;
-  double total = 0.0;
-  for (const auto& [source_name, source_info] : this->energy_mix_) {
-    total += source_info.percentage;
-    new_weighted_carbon_intensity += (source_info.carbon_intensity * source_info.percentage) / 100.0;
-    new_weighted_water_intensity += (source_info.water_intensity * source_info.percentage) / 100.0;
-  }
-
-  this->current_weighted_carbon_intensity_ = new_weighted_carbon_intensity;
-  this->current_weighted_water_intensity_ = new_weighted_water_intensity;
-}
 
 void HostEnvironmentalFootprint::ensure_up_to_date() 
 {
@@ -537,36 +373,6 @@ double sg_host_get_water_intensity(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostEnvironmentalFootprint>()->get_host_water_intensity();
-}
-
-void sg_host_set_energy_mix(const_sg_host_t host, const std::map<std::string, EnergySource>& mix)
-{
-  ensure_plugin_inited();
-  host->extension<HostEnvironmentalFootprint>()->set_host_energy_mix(mix);
-}
-
-std::string sg_host_get_energy_mix_formatted(const_sg_host_t host)
-{
-  ensure_plugin_inited();
-  return host->extension<HostEnvironmentalFootprint>()->get_host_energy_mix_formatted();
-}
-
-void sg_host_set_energy_mix_composition(const_sg_host_t host, const std::map<std::string, double>& composition)
-{
-  ensure_plugin_inited();
-  host->extension<HostEnvironmentalFootprint>()->set_host_energy_mix_composition(composition);
-}
-
-void sg_host_set_carbon_intensities(const_sg_host_t host, const std::map<std::string, double>& intensities)
-{
-  ensure_plugin_inited();
-  host->extension<HostEnvironmentalFootprint>()->set_carbon_intensities(intensities);
-}
-
-void sg_host_set_water_intensities(const_sg_host_t host, const std::map<std::string, double>& intensities)
-{
-  ensure_plugin_inited();
-  host->extension<HostEnvironmentalFootprint>()->set_water_intensities(intensities);
 }
 
 void sg_host_set_wue(const_sg_host_t host, double new_wue)
