@@ -36,73 +36,21 @@ TEST_CASE("plugins::host_environmental_footprint: Basic functionality", "[plugin
   {
     REQUIRE(sg_host_get_carbon_footprint(host) == 0.0);
     REQUIRE(sg_host_get_water_footprint(host) == 0.0);
-  }
-  
-  SECTION("Energy mix can be retrieved")
-  {
-    std::string mix = sg_host_get_energy_mix_formatted(host);
-    REQUIRE_FALSE(mix.empty());
-  }
+  } 
 }
 
-TEST_CASE("plugins::host_environmental_footprint: Basic energy mix configuration", "[plugin][enviromental_footprint]")
+
+TEST_CASE("plugins::host_environmental_footprint: Footprint accumulation", "[plugin][environmental_footprint]")
 {
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
   e.seal_platform();
   
-  SECTION("Set complete energy mix")
-  {
-    std::map<std::string, EnergySource> mix = {
-      {"Coal", {50.0, 1000.0, 1500.0}},
-      {"Solar", {50.0, 50.0, 50.0}}
-    };
-    REQUIRE_NOTHROW(sg_host_set_energy_mix(host, mix));
-  }
-  
-  SECTION("Set energy mix composition")
-  {
-    std::map<std::string, double> composition = {{"Coal", 70.0}, {"Hydro", 30.0}};
-    REQUIRE_NOTHROW(sg_host_set_energy_mix_composition(host, composition));
-  }
-  
-  SECTION("Set carbon and water intensities")
-  {
-    std::map<std::string, double> carbon = {{"Coal", 1000.0}};
-    std::map<std::string, double> water = {{"Coal", 1500.0}};
-    REQUIRE_NOTHROW(sg_host_set_carbon_intensities(host, carbon));
-    REQUIRE_NOTHROW(sg_host_set_water_intensities(host, water));
-  }
-
-  SECTION("Invalid mix composition falls back to zero footprint")
-  {
-    // Build a mix that sums to 99% (invalid) with non-zero intensities
-    std::map<std::string, EnergySource> bad_mix = {
-        {"Coal",  {90.0, 1000.0, 1500.0}}, {"Solar", {9.0, 50.0, 50.0}}
-    };
-
-    sg_host_set_energy_mix(host, bad_mix);
-
-    host->add_actor("worker", []() {
-      simgrid::s4u::this_actor::execute(1e9);
-    });
-    e.run();
-
-    REQUIRE(sg_host_get_carbon_footprint(host) == Approx(0.0));
-    REQUIRE(sg_host_get_water_footprint(host)  == Approx(0.0));
-  }
-}
-
-TEST_CASE("plugins::host_environmental_footprint: Footprint accumulation", "[plugin][enviromental_footprint]")
-{
-  sg_host_environmental_footprint_plugin_init();
-  simgrid::s4u::Engine e("test");
-  auto* host = create_test_host(e);
-  e.seal_platform();
-  
-  std::map<std::string, EnergySource> mix = {{"Coal", {100.0, 1000.0, 1500.0}}};
-  sg_host_set_energy_mix(host, mix);
+  sg_host_set_carbon_intensity(host, 1000.0);
+  sg_host_set_water_intensity(host, 1500.0);
+  sg_host_set_pue(host, 1.0);
+  sg_host_set_wue(host, 1.5);
   
   double carbon_before = sg_host_get_carbon_footprint(host);
   double water_before = sg_host_get_water_footprint(host);
@@ -128,16 +76,15 @@ TEST_CASE("plugins::host_environmental_footprint: Footprint calculation accuracy
   auto* host = create_test_host(e);
   e.seal_platform();
   
-  SECTION("Carbon footprint calculated correctly with known energy consumption")
+  SECTION("Carbon footprint calculated correctly (Off-site only)")
   {
-    // Set 100% coal with 1000 g CO2/kWh
-    std::map<std::string, EnergySource> mix = {{"Coal", {100.0, 1000.0, 0.0}}};
-    sg_host_set_energy_mix(host, mix);
+    sg_host_set_carbon_intensity(host, 1000.0); // 1000 g CO2/kWh
+    sg_host_set_pue(host, 1.5);
     
     // Execute work: 1 GFlop at 1 GFlop/s = 1 second
     // Power consumption: 100W (from wattage_per_state)
     // Energy: 100W * 1/3600 s = 1/36 Wh = 1/36000 kWh
-    // Expected CO2: 1/36000 kWh * 1000 g/kWh = 1/36 g =~ 0.027778
+    // Expected CO2 with PUE 1.5: 1/36000 kWh * 1000 g/kWh * 1.5 = 1/24 g =~ 0.041667
     host->add_actor("worker", []() {
       simgrid::s4u::this_actor::execute(1e9);
     });
@@ -145,18 +92,20 @@ TEST_CASE("plugins::host_environmental_footprint: Footprint calculation accuracy
     e.run();
     
     double carbon = sg_host_get_carbon_footprint(host);
-    REQUIRE(carbon == Approx(0.027778).margin(0.000001)); // ±0.000001g tolerance
+    REQUIRE(carbon == Approx(0.041667).margin(0.000001)); // ±0.000001g tolerance
   }
   
-  SECTION("Water footprint calculated correctly with known energy consumption")
+  SECTION("Water footprint calculated correctly (Off-site + On-site)")
   {
-    // Set 100% coal with 1500 L/kWh
-    std::map<std::string, EnergySource> mix = {{"Coal", {100.0, 0.0, 1500.0}}};
-    sg_host_set_energy_mix(host, mix);
-    
+    sg_host_set_water_intensity(host, 1500.0); // 1500 L/kWh
+    sg_host_set_wue(host, 2.0);
+    sg_host_set_pue(host, 1.5);
+  
     // Execute work: 1 GFlop at 1 GFlop/s = 1 second
     // Energy: 100W * 1/3600 s = 1/36 Wh = 1/36000 kWh
-    // Expected water: 1/36000 kWh * 1500 L/kWh = 0.04166667 L
+    // Expected water on-site with WUE 2.0: 1/36000 kWh * 2.0 = 1/18000 L = 0.000055556 L
+    // Expected water off-site with PUE 1.5: 1/36000 kWh * 1.5 * 1500 L/kWh = 1/24 L = 0.041667 L
+    // Total expected water: 0.041667 + 0.00055556 = 0.041722 L
     host->add_actor("worker", []() {
       simgrid::s4u::this_actor::execute(1e9);
     });
@@ -164,39 +113,14 @@ TEST_CASE("plugins::host_environmental_footprint: Footprint calculation accuracy
     e.run();
     
     double water = sg_host_get_water_footprint(host);
-    REQUIRE(water == Approx(0.041667).margin(0.000001)); // ±0.000001L tolerance
+    REQUIRE(water == Approx(0.041722).margin(0.000001)); // ±0.000001L tolerance
   }
   
-  SECTION("Mixed energy sources calculate weighted average correctly")
+  SECTION("Zero intensity sources produce zero footprint (excluding on-site/embodied)")
   {
-    // 50% Coal (1000 g/kWh) + 50% Solar (50 g/kWh) = 525 g/kWh weighted average
-    // 50% Coal (1500 L/kWh) + 50% Solar (100 L/kWh) = 800 L/kWh weighted average
-    std::map<std::string, EnergySource> mix = {
-      {"Coal", {50.0, 1000.0, 1500.0}},
-      {"Solar", {50.0, 50.0, 100.0}}
-    };
-    sg_host_set_energy_mix(host, mix);
-    
-    // Execute work: energy = 1/36000 kWh
-    // Expected CO2: 1/36000 kWh * 525 g/kWh = 0.014583 g
-    // Expected water: 1/36000 kWh * 800 L/kWh = 0.022222 L
-    host->add_actor("worker", []() {
-      simgrid::s4u::this_actor::execute(1e9);
-    });
-    
-    e.run();
-    
-    double carbon = sg_host_get_carbon_footprint(host);
-    double water = sg_host_get_water_footprint(host);
-    
-    REQUIRE(carbon == Approx(0.014583).margin(0.000001)); 
-    REQUIRE(water == Approx(0.022222).margin(0.000001)); 
-  }
-  
-  SECTION("Zero intensity sources produce zero footprint")
-  {
-    std::map<std::string, EnergySource> mix = {{"Clean", {100.0, 0.0, 0.0}}};
-    sg_host_set_energy_mix(host, mix);
+    sg_host_set_carbon_intensity(host, 0.0);
+    sg_host_set_water_intensity(host, 0.0);
+    sg_host_set_wue(host, 0.0);
     
     host->add_actor("worker", []() {
       simgrid::s4u::this_actor::execute(1e9);
@@ -209,130 +133,90 @@ TEST_CASE("plugins::host_environmental_footprint: Footprint calculation accuracy
   }
 }
 
-
-TEST_CASE("plugins::host_environmental_footprint: Get methods return correct values", "[plugin][enviromental_footprint]")
+TEST_CASE("plugins::host_environmental_footprint: PUE impact on offsite footprint", "[plugin][environmental_footprint]")
 {
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
   e.seal_platform();
   
-  SECTION("Energy mix formatted output contains set values")
-  {
-    std::map<std::string, EnergySource> mix = {
-      {"Coal", {60.0, 1000.0, 1500.0}},
-      {"Hydro", {25.0, 24.0, 100.0}},
-      {"Solar", {15.0, 50.0, 50.0}}
-    };
-    sg_host_set_energy_mix(host, mix);
-    
-    std::string formatted = sg_host_get_energy_mix_formatted(host);
-    
-    // Check that all sources are present in the output
-    REQUIRE(formatted.find("Coal") != std::string::npos);
-    REQUIRE(formatted.find("Hydro") != std::string::npos);
-    REQUIRE(formatted.find("Solar") != std::string::npos);
-    
-    // Check that percentages are present
-    REQUIRE(formatted.find("60") != std::string::npos);
-    REQUIRE(formatted.find("25") != std::string::npos);
-    REQUIRE(formatted.find("15") != std::string::npos);
-    
-    // Check that intensities are present
-    REQUIRE(formatted.find("1000") != std::string::npos);
-    REQUIRE(formatted.find("1500") != std::string::npos);
-  }
+  sg_host_set_carbon_intensity(host, 1000.0); // 1000 g/kWh
+  sg_host_set_pue(host, 2.0); // PUE of 2.0 should double the off-site footprint
   
-  SECTION("Modified composition is reflected in formatted output")
-  {
-    std::map<std::string, EnergySource> mix = {
-      {"Coal", {50.0, 1000.0, 1500.0}},
-      {"Solar", {50.0, 50.0, 50.0}}
-    };
-    sg_host_set_energy_mix(host, mix);
-    
-    // Modify composition
-    std::map<std::string, double> new_composition = {
-      {"Coal", 30.0},
-      {"Solar", 70.0}
-    };
-    sg_host_set_energy_mix_composition(host, new_composition);
-    
-    std::string formatted = sg_host_get_energy_mix_formatted(host);
-    
-    // Check new percentages are reflected
-    REQUIRE(formatted.find("30") != std::string::npos);
-    REQUIRE(formatted.find("70") != std::string::npos);
-  }
+  // Execute work: 1 GFlop at 1 GFlop/s = 1 second
+  // Power consumption: 100W (from wattage_per_state)
+  // Energy: 100W * 1/3600 s = 1/36 Wh = 1/36000 kWh
+  // Expected CO2 with PUE 2.0: 1/36000 kWh * 1000 g/kWh * 2.0 = 1/18 g =~ 0.055556
+  host->add_actor("worker", []() {
+    simgrid::s4u::this_actor::execute(1e9);
+  });
+  e.run();
   
-  SECTION("Modified intensities affect footprint calculations")
-  { 
-    // Start with 100% coal at half intensities
-    std::map<std::string, EnergySource> mix = {{"Coal", {100.0, 500.0, 750.0}}};
-    sg_host_set_energy_mix(host, mix);
-
-    double carbon_after_first = 0.0;
-    double water_after_first  = 0.0;
-    double carbon_after_second = 0.0;
-    double water_after_second  = 0.0;
-
-    host->add_actor("two_phase_worker", [&]() {
-      // Phase 1: run workload
-      simgrid::s4u::this_actor::execute(1e9);
-
-      carbon_after_first = sg_host_get_carbon_footprint(host);
-      water_after_first  = sg_host_get_water_footprint(host);
-
-      // Update intensities
-      sg_host_set_carbon_intensities(host, {{"Coal", 1000.0}}); // 2x carbon
-      sg_host_set_water_intensities(host,  {{"Coal", 1500.0}}); // 2x water
-
-      // Phase 2: run same workload again
-      simgrid::s4u::this_actor::execute(1e9);
-
-      carbon_after_second = sg_host_get_carbon_footprint(host);
-      water_after_second  = sg_host_get_water_footprint(host);
-    });
-
-    e.run();
-
-    // Compare increments
-    const double carbon_delta1 = carbon_after_first;
-    const double carbon_delta2 = carbon_after_second - carbon_after_first;
-
-    const double water_delta1 = water_after_first;
-    const double water_delta2 = water_after_second - water_after_first;
-
-    REQUIRE(carbon_delta2 == Approx(2.0 * carbon_delta1).margin(1e-9));
-    REQUIRE(water_delta2  == Approx(2.0 * water_delta1).margin(1e-9));
-  }
-  
-  SECTION("Footprint getters are idempotent")
-  {
-    std::map<std::string, EnergySource> mix = {{"Coal", {100.0, 1000.0, 1500.0}}};
-    sg_host_set_energy_mix(host, mix);
-    
-    host->add_actor("worker", []() {
-      simgrid::s4u::this_actor::execute(1e9);
-    });
-    e.run();
-    
-    // Multiple calls should return same value
-    double carbon1 = sg_host_get_carbon_footprint(host);
-    double carbon2 = sg_host_get_carbon_footprint(host);
-    double carbon3 = sg_host_get_carbon_footprint(host);
-    
-    REQUIRE(carbon1 == carbon2);
-    REQUIRE(carbon2 == carbon3);
-    
-    double water1 = sg_host_get_water_footprint(host);
-    double water2 = sg_host_get_water_footprint(host);
-    double water3 = sg_host_get_water_footprint(host);
-    
-    REQUIRE(water1 == water2);
-    REQUIRE(water2 == water3);
-  }
+  REQUIRE(sg_host_get_carbon_footprint(host) == Approx(0.055556).margin(0.000001));
 }
+
+TEST_CASE("plugins::host_environmental_footprint: WUE impact and dynamic update", "[plugin][environmental_footprint]")
+{
+  sg_host_environmental_footprint_plugin_init();
+  simgrid::s4u::Engine e("test");
+  auto* host = create_test_host(e);
+  e.seal_platform();
+  
+  sg_host_set_water_intensity(host, 0.0); // No off-site water use
+  
+  double water_mid = 0.0;
+  
+  host->add_actor("worker", [&]() {
+    // First phase: WUE = 1.8
+    sg_host_set_wue(host, 1.8);
+    simgrid::s4u::this_actor::execute(1e9); // 1s
+    
+    water_mid = sg_host_get_water_footprint(host);
+    
+    // Second phase: WUE = 0.3 
+    sg_host_set_wue(host, 0.3);
+    simgrid::s4u::this_actor::execute(1e9); // +1s
+  });
+  
+  e.run();
+  
+  double water_end = sg_host_get_water_footprint(host);
+  
+  // First phase (with WUE 1.8): (1/36000) * 1.8 = 0.000050 L
+  REQUIRE(water_mid == Approx(0.000050).margin(0.000001));
+  
+  // Second phase (with WUE 0.3): (1/36000) * 0.3 = 0.0000083 L
+  // Expected total = 0.0000583 L
+  REQUIRE(water_end == Approx(0.0000583).margin(0.000001));
+}
+
+TEST_CASE("plugins::host_environmental_footprint: Embodied footprint amortization", "[plugin][environmental_footprint]")
+{
+  sg_host_environmental_footprint_plugin_init();
+  simgrid::s4u::Engine e("test");
+  auto* root = e.get_netzone_root();
+  auto* zone = root->add_netzone_full("test_zone"); 
+  auto* host = zone->add_host("host_embodied", 1e9);
+  
+  host->set_property("wattage_per_state", "100.0:100.0:100.0");
+  host->set_property("embodied_carbon", "7200.0"); // 7200g
+  host->set_property("host_lifetime", "3600.0");   // 1 hour of useful life
+  host->seal();
+  zone->seal();
+  e.seal_platform();
+  
+  sg_host_set_carbon_intensity(host, 0.0); // No operational carbon, only embodied
+  
+  host->add_actor("worker", []() {
+    simgrid::s4u::this_actor::sleep_for(10.0);
+  });
+  e.run();
+  
+  // Fraction of life used: 10s / 3600s
+  // Expected carbon = (10/3600) * 7200 = 20.0 g
+  REQUIRE(sg_host_get_carbon_footprint(host) == Approx(20.0).margin(0.000001));
+}
+
 
 TEST_CASE("plugins::host_environmental_footprint: Getters work when called from actor during run", "[plugin][environmental_footprint]")
 {
@@ -341,10 +225,10 @@ TEST_CASE("plugins::host_environmental_footprint: Getters work when called from 
   auto* host = create_test_host(e);
   e.seal_platform();
 
-  std::map<std::string, EnergySource> mix = {
-      {"Coal", {100.0, 1000.0, 1500.0}}
-  };
-  sg_host_set_energy_mix(host, mix);
+  sg_host_set_carbon_intensity(host, 1000.0);
+  sg_host_set_water_intensity(host, 1500.0);
+  sg_host_set_pue(host, 1.0);
+  sg_host_set_wue(host, 1.5);
 
   double carbon_mid = 0.0;
   double water_mid  = 0.0;
@@ -371,48 +255,3 @@ TEST_CASE("plugins::host_environmental_footprint: Getters work when called from 
   REQUIRE(carbon_end >= carbon_mid);
   REQUIRE(water_end  >= water_mid);
 }
-
-TEST_CASE("plugins::host_environmental_footprint: get_*_intensity returns weighted values", "[plugin][enviromental_footprint]")
-{
-  sg_host_environmental_footprint_plugin_init();
-
-  simgrid::s4u::Engine e("test");
-  auto* host = create_test_host(e);
-  e.seal_platform();
-
-  // 70% Coal (1000 g/kWh, 1500 L/kWh) + 30% Hydro (24 g/kWh, 100 L/kWh)
-  std::map<std::string, EnergySource> mix = {
-      {"Coal",  {70.0, 1000.0, 1500.0}},
-      {"Hydro", {30.0,   24.0,  100.0}}
-  };
-  sg_host_set_energy_mix(host, mix);
-
-  const double expected_carbon = 0.70 * 1000.0 + 0.30 * 24.0;   // 707.2 g/kWh
-  const double expected_water  = 0.70 * 1500.0 + 0.30 * 100.0;  // 1080  L/kWh
-
-  REQUIRE(sg_host_get_carbon_intensity(host) == Approx(expected_carbon).margin(1e-12));
-  REQUIRE(sg_host_get_water_intensity(host)  == Approx(expected_water).margin(1e-12));
-}
-
-TEST_CASE("plugins::host_environmental_footprint: get_*_intensity updates after intensity changes", "[plugin][enviromental_footprint]")
-{
-  sg_host_environmental_footprint_plugin_init();
-
-  simgrid::s4u::Engine e("test");
-  auto* host = create_test_host(e);
-  e.seal_platform();
-
-  // Start: 100% Coal with lower intensities
-  sg_host_set_energy_mix(host, {{"Coal", {100.0, 500.0, 750.0}}});
-
-  REQUIRE(sg_host_get_carbon_intensity(host) == Approx(500.0).margin(1e-12));
-  REQUIRE(sg_host_get_water_intensity(host)  == Approx(750.0).margin(1e-12));
-
-  // Change intensities (should reflect immediately in getters)
-  sg_host_set_carbon_intensities(host, {{"Coal", 1000.0}});
-  sg_host_set_water_intensities(host,  {{"Coal", 1500.0}});
-
-  REQUIRE(sg_host_get_carbon_intensity(host) == Approx(1000.0).margin(1e-12));
-  REQUIRE(sg_host_get_water_intensity(host)  == Approx(1500.0).margin(1e-12));
-}
-
