@@ -109,8 +109,11 @@ public:
   double get_host_carbon_footprint();
   double get_host_water_footprint();
   double get_host_carbon_intensity();
+  void set_carbon_intensity(double new_intensity);
   double get_host_water_intensity();
+  void set_water_intensity(double new_intensity);
   double get_last_update_time() const { return last_updated_; }
+  void set_pue(double new_pue);
   void set_wue(double new_wue);
   void update();
 private:
@@ -224,17 +227,34 @@ double HostEnvironmentalFootprint::get_host_carbon_intensity()
   return this->carbon_intensity_;
 }
 
+void HostEnvironmentalFootprint::set_carbon_intensity(double new_intensity)
+{
+  this->ensure_up_to_date();
+  this->carbon_intensity_ = new_intensity;
+}
+
 double HostEnvironmentalFootprint::get_host_water_intensity() 
 {
   this->ensure_up_to_date();
   return this->water_intensity_;
 }
 
+void HostEnvironmentalFootprint::set_water_intensity(double new_intensity)
+{
+  this->ensure_up_to_date();
+  this->water_intensity_ = new_intensity;
+}
+
 void HostEnvironmentalFootprint::set_wue(double new_wue)
 {
   this->ensure_up_to_date();
-
   this->wue_ = new_wue;
+}
+
+void HostEnvironmentalFootprint::set_pue(double new_pue)
+{
+  this->ensure_up_to_date();
+  this->pue_ = new_pue;
 }
 
 HostEnvironmentalFootprint::~HostEnvironmentalFootprint() = default;
@@ -369,10 +389,28 @@ double sg_host_get_carbon_intensity(const_sg_host_t host)
   return host->extension<HostEnvironmentalFootprint>()->get_host_carbon_intensity();
 }
 
+void sg_host_set_carbon_intensity(const_sg_host_t host, double new_intensity)
+{
+  ensure_plugin_inited();
+  host->extension<HostEnvironmentalFootprint>()->set_carbon_intensity(new_intensity);
+}
+
 double sg_host_get_water_intensity(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostEnvironmentalFootprint>()->get_host_water_intensity();
+}
+
+void sg_host_set_water_intensity(const_sg_host_t host, double new_intensity)
+{
+  ensure_plugin_inited();
+  host->extension<HostEnvironmentalFootprint>()->set_water_intensity(new_intensity);
+}
+
+void sg_host_set_pue(const_sg_host_t host, double new_pue)
+{
+  ensure_plugin_inited();
+  host->extension<HostEnvironmentalFootprint>()->set_pue(new_pue);
 }
 
 void sg_host_set_wue(const_sg_host_t host, double new_wue)
