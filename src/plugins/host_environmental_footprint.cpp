@@ -114,7 +114,9 @@ public:
   void set_water_intensity(double new_intensity);
   double get_last_update_time() const { return last_updated_; }
   void set_pue(double new_pue);
+  double get_pue() const { return pue_; }
   void set_wue(double new_wue);
+  double get_wue() const { return wue_; }
   void update();
 private:
   simgrid::s4u::Host* host_ = nullptr;
@@ -417,4 +419,16 @@ void sg_host_set_wue(const_sg_host_t host, double new_wue)
 {
   ensure_plugin_inited();
   host->extension<HostEnvironmentalFootprint>()->set_wue(new_wue);
+}
+
+double sg_host_get_pue(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_pue();
+}
+
+double sg_host_get_wue(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_wue();
 }

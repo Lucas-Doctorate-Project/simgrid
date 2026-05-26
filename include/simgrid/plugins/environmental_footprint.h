@@ -30,7 +30,9 @@ XBT_PUBLIC void sg_host_set_carbon_intensity(const_sg_host_t host, double new_in
 XBT_PUBLIC double sg_host_get_water_intensity(const_sg_host_t host);
 XBT_PUBLIC void sg_host_set_water_intensity(const_sg_host_t host, double new_intensity);
 XBT_PUBLIC void sg_host_set_pue(const_sg_host_t host, double new_pue);
+XBT_PUBLIC double sg_host_get_pue(const_sg_host_t host);
 XBT_PUBLIC void sg_host_set_wue(const_sg_host_t host, double new_wue);
+XBT_PUBLIC double sg_host_get_wue(const_sg_host_t host);
 
 SG_END_DECL
 
