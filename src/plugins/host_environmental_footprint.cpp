@@ -108,6 +108,11 @@ public:
 
   double get_host_carbon_footprint();
   double get_host_water_footprint();
+  double get_carbon_operational();
+  double get_carbon_embodied();
+  double get_water_onsite();
+  double get_water_offsite();
+  double get_water_embodied();
   double get_host_carbon_intensity();
   void set_carbon_intensity(double new_intensity);
   double get_host_water_intensity();
@@ -130,8 +135,14 @@ private:
   double embodied_water_  = 0.0;  // total L embodied in host production
   double host_lifetime_seconds_  = 0.0;  // Expected useful life of the host (seconds)
 
-  double total_carbon_footprint_ = 0.0; /* Total CO2 emitted to produce the energy used by the host */ 
+  double total_carbon_footprint_ = 0.0; /* Total CO2 emitted to produce the energy used by the host */
   double total_water_footprint_ = 0.0; /* Total water used to produce the energy used by the host */
+
+  double carbon_operational_ = 0.0; /* Off-site CO2 from grid electricity */
+  double carbon_embodied_    = 0.0; /* Amortized embodied CO2 from host manufacturing */
+  double water_onsite_       = 0.0; /* On-site cooling water */
+  double water_offsite_      = 0.0; /* Off-site water for grid electricity generation */
+  double water_embodied_     = 0.0; /* Amortized embodied water from host manufacturing */
   
   double carbon_intensity_ = 0.0; /* Current weighted carbon intensity of the energy mix (g CO2/kWh) */
   double water_intensity_ = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
@@ -159,15 +170,15 @@ void HostEnvironmentalFootprint::update()
 
   double lifetime_fraction_this_step = (this->host_lifetime_seconds_ > 0.0) ? (deltaT / this->host_lifetime_seconds_) : 0.0;
 
-  double offsite_carbon_footprint = total_datacenter_energy_this_step_kwh * this->carbon_intensity_;
-  double embodied_carbon_footprint = this->embodied_carbon_ * lifetime_fraction_this_step;
-  
-  double onsite_water_consumption = computation_energy_this_step_kwh * this->wue_;
-  double offsite_water_consumption = total_datacenter_energy_this_step_kwh * this->water_intensity_;
-  double embodied_water_consumption = this->embodied_water_ * lifetime_fraction_this_step;
+  this->carbon_operational_ += total_datacenter_energy_this_step_kwh * this->carbon_intensity_;
+  this->carbon_embodied_    += this->embodied_carbon_ * lifetime_fraction_this_step;
 
-  this->total_carbon_footprint_ = this->total_carbon_footprint_ + offsite_carbon_footprint + embodied_carbon_footprint;
-  this->total_water_footprint_ = this->total_water_footprint_ + offsite_water_consumption + onsite_water_consumption + embodied_water_consumption;
+  this->water_onsite_   += computation_energy_this_step_kwh * this->wue_;
+  this->water_offsite_  += total_datacenter_energy_this_step_kwh * this->water_intensity_;
+  this->water_embodied_ += this->embodied_water_ * lifetime_fraction_this_step;
+
+  this->total_carbon_footprint_ = this->carbon_operational_ + this->carbon_embodied_;
+  this->total_water_footprint_  = this->water_onsite_ + this->water_offsite_ + this->water_embodied_;
 
   this->last_updated_ = finish_time;
 
@@ -217,13 +228,43 @@ double HostEnvironmentalFootprint::get_host_carbon_footprint()
   return this->total_carbon_footprint_;
 }
 
-double HostEnvironmentalFootprint::get_host_water_footprint() 
+double HostEnvironmentalFootprint::get_host_water_footprint()
 {
   this->ensure_up_to_date();
   return this->total_water_footprint_;
 }
 
-double HostEnvironmentalFootprint::get_host_carbon_intensity() 
+double HostEnvironmentalFootprint::get_carbon_operational()
+{
+  this->ensure_up_to_date();
+  return this->carbon_operational_;
+}
+
+double HostEnvironmentalFootprint::get_carbon_embodied()
+{
+  this->ensure_up_to_date();
+  return this->carbon_embodied_;
+}
+
+double HostEnvironmentalFootprint::get_water_onsite()
+{
+  this->ensure_up_to_date();
+  return this->water_onsite_;
+}
+
+double HostEnvironmentalFootprint::get_water_offsite()
+{
+  this->ensure_up_to_date();
+  return this->water_offsite_;
+}
+
+double HostEnvironmentalFootprint::get_water_embodied()
+{
+  this->ensure_up_to_date();
+  return this->water_embodied_;
+}
+
+double HostEnvironmentalFootprint::get_host_carbon_intensity()
 {
   this->ensure_up_to_date();
   return this->carbon_intensity_;
@@ -383,6 +424,36 @@ double sg_host_get_water_footprint(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostEnvironmentalFootprint>()->get_host_water_footprint();
+}
+
+double sg_host_get_carbon_operational_footprint(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_carbon_operational();
+}
+
+double sg_host_get_carbon_embodied_footprint(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_carbon_embodied();
+}
+
+double sg_host_get_water_onsite_footprint(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_water_onsite();
+}
+
+double sg_host_get_water_offsite_footprint(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_water_offsite();
+}
+
+double sg_host_get_water_embodied_footprint(const_sg_host_t host)
+{
+  ensure_plugin_inited();
+  return host->extension<HostEnvironmentalFootprint>()->get_water_embodied();
 }
 
 double sg_host_get_carbon_intensity(const_sg_host_t host)
