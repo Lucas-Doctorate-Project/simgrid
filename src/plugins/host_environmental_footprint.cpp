@@ -27,50 +27,83 @@ SIMGRID_REGISTER_PLUGIN(host_environmental_footprint, "Host environmental footpr
 
 /** @addtogroup plugin_environmental_footprint
 
-This is the environmental footprint plugin. It calculates both carbon and water footprint
-and intensity factors of SimGrid hosts.
+This is the environmental footprint plugin. It tracks the carbon emissions and water consumption
+attributable to each SimGrid host over the course of a simulation.
 
-To calculate the intensities, we average known intensity factors from different sources
-according to the energy mix distribution. If we have \f$N\f$ distinct energy sources,
-the weighted intensity \f$\bar{I}\f$ can be calculated by:
+The plugin decomposes the footprint into five distinct contributions that are accumulated
+incrementally each simulation step and exposed both individually and as combined totals:
+
+- **Operational carbon** (\f$F^{\text{C}}_{\text{op}}\f$): off-site CO₂ from generating the grid
+  electricity drawn by the host and its supporting datacenter infrastructure.
+- **Embodied carbon** (\f$F^{\text{C}}_{\text{emb}}\f$): CO₂ emitted during host manufacturing,
+  amortized over the host's expected lifetime.
+- **On-site water** (\f$F^{\text{W}}_{\text{on}}\f$): water consumed locally for cooling.
+- **Off-site water** (\f$F^{\text{W}}_{\text{off}}\f$): water consumed off-site to generate the
+  electricity used by the host (e.g. for thermoelectric cooling or hydropower evaporation).
+- **Embodied water** (\f$F^{\text{W}}_{\text{emb}}\f$): water consumed during host manufacturing,
+  amortized over the host's expected lifetime.
+
+Let \f$E\f$ be the IT energy consumed by the host during a time step \f$\Delta t\f$ (in kWh, tracked
+by the energy plugin), \f$\text{PUE}\f$ the datacenter Power Usage Effectiveness, \f$\text{WUE}\f$
+the Water Usage Effectiveness (L/kWh of IT energy), \f$I^{\text{C}}\f$ and \f$I^{\text{W}}\f$ the
+carbon and water intensities of the grid (g CO₂/kWh and L/kWh respectively), \f$C_{\text{emb}}\f$
+and \f$W_{\text{emb}}\f$ the embodied carbon (g CO₂) and water (L) of the host, and \f$L\f$ its
+expected lifetime (in seconds). Each step contributes:
 
 \f[
-  \bar{I} = \frac{\sum_{j=1}^{N} (I_j \cdot w_j)}{\sum_{j=1}^{N} w_j}
+\begin{aligned}
+\Delta F^{\text{C}}_{\text{op}}  &= E \cdot \text{PUE} \cdot I^{\text{C}}      & \quad
+\Delta F^{\text{C}}_{\text{emb}} &= C_{\text{emb}} \cdot \frac{\Delta t}{L} \\
+\Delta F^{\text{W}}_{\text{on}}  &= E \cdot \text{WUE}                          & \quad
+\Delta F^{\text{W}}_{\text{off}} &= E \cdot \text{PUE} \cdot I^{\text{W}}       \\
+\Delta F^{\text{W}}_{\text{emb}} &= W_{\text{emb}} \cdot \frac{\Delta t}{L}
+\end{aligned}
 \f]
 
-where \f$I_j\f$ is the intensity factor of source \f$j\f$, and \f$w_j\f$ is the proportion
-of the contribution of source \f$j\f$ to the energy mix. Note that \f$\sum_{j=1}^{N} w_j = 1\f$.
-
-From these averaged intensities, we can calculate the footprint \f$F\f$ by knowing how much
-energy a specific host consumes (\f$E\f$):
+The combined totals are simply the sums of their components:
 
 \f[
-  F = \bar{I} \cdot E
+F^{\text{C}}_{\text{total}} = F^{\text{C}}_{\text{op}} + F^{\text{C}}_{\text{emb}}, \qquad
+F^{\text{W}}_{\text{total}} = F^{\text{W}}_{\text{on}} + F^{\text{W}}_{\text{off}} + F^{\text{W}}_{\text{emb}}
 \f]
 
-The plugin calculates:
-- The total CO₂ emissions of each host based on its energy consumption and the CO₂ emission rate
-- The total water consumption of each host based on its energy consumption and the water consumption rate
+To activate this plugin, call :cpp:func:`sg_host_environmental_footprint_plugin_init()` before
+loading your platform. The footprints are then updated automatically whenever the host changes
+state, changes speed, or one of the getters is queried.
 
-To activate this plugin, first call :cpp:func:`sg_host_environmental_footprint_plugin_init()` before loading your platform.
-Then, use :cpp:func:`sg_host_get_carbon_footprint()` to retrieve the total CO₂ emissions of a given host, or :cpp:func:`sg_host_get_water_footprint()`
-to retrieve the total water consumption.
+Use :cpp:func:`sg_host_get_carbon_footprint()` and :cpp:func:`sg_host_get_water_footprint()` to
+retrieve the combined totals, or one of the per-component getters for the breakdown:
 
-The footprints are calculated by multiplying the energy consumed by the host (tracked by the energy plugin) with the
-weighted intensity factors derived from the configured energy mix. Updates occur automatically when the host changes
-state, changes speed, or when footprint values are queried. The total footprint accumulates incrementally over the
-simulation time.
+- :cpp:func:`sg_host_get_carbon_operational_footprint()`
+- :cpp:func:`sg_host_get_carbon_embodied_footprint()`
+- :cpp:func:`sg_host_get_water_onsite_footprint()`
+- :cpp:func:`sg_host_get_water_offsite_footprint()`
+- :cpp:func:`sg_host_get_water_embodied_footprint()`
 
-The energy mix is defined as a map where each entry is keyed by the name of the energy source (e.g., coal, natural gas, renewables).
-Each entry specifies the percentage that source contributes to the overall energy mix, along with its carbon intensity
-(in grams of CO₂ per kWh) and water intensity (in liters per kWh). The energy mix can be configured for each host using
-:cpp:func:`sg_host_set_energy_mix()`.
+Carbon and water intensities, PUE and WUE can be inspected and overridden at runtime via
+:cpp:func:`sg_host_get_carbon_intensity()` / :cpp:func:`sg_host_set_carbon_intensity()` and the
+analogous water, PUE, and WUE accessors. This is useful for modelling time-varying grid mixes or
+datacenter conditions.
 
-The model requires the following parameters:
-  - **Energy consumption**: Calculated by the energy plugin based on the host's power profile and activity
-  - **Energy mix**: The composition of energy sources (e.g., coal 70%, hydro 20%, solar 10%)
-  - **Carbon intensity**: The amount of CO₂ emitted (in grams per kWh) to generate energy from each source
-  - **Water intensity**: The amount of water consumed (in liters per kWh) to generate energy from each source
+The model is configured per host via the following XML properties (all optional, defaulting to
+neutral values that disable the corresponding contribution):
+
+  - ``carbon_intensity`` — grid carbon intensity in g CO₂/kWh.
+  - ``water_intensity`` — grid water intensity in L/kWh.
+  - ``pue`` — Power Usage Effectiveness (dimensionless, ≥ 1; defaults to 1.0).
+  - ``wue`` — Water Usage Effectiveness in L/kWh of IT energy (defaults to 0.0).
+  - ``embodied_carbon`` — total g CO₂ embodied in the host's manufacturing.
+  - ``embodied_water`` — total L of water embodied in the host's manufacturing.
+  - ``host_lifetime`` — expected useful life of the host in seconds, used to amortize embodied
+    impacts. If left at 0, no embodied contribution is accumulated.
+
+Carbon and water intensities are expected to be pre-aggregated over the energy mix of the host's
+grid. A simple weighted average works well, where given \f$N\f$ sources with intensities \f$I_j\f$
+and shares \f$w_j\f$ (with \f$\sum_j w_j = 1\f$):
+
+\f[
+  \bar{I} = \sum_{j=1}^{N} I_j \cdot w_j
+\f]
 
 Here is an example of XML declaration:
 
@@ -79,16 +112,21 @@ Here is an example of XML declaration:
    <host id="Host1" speed="100.0Mf, 1e-9Mf, 0.5f, 0.05f" pstate="0">
        <prop id="wattage_per_state" value="30.0:30.0:100.0, 9.75:9.75:9.75, 200.996721311:200.996721311:200.996721311, 425.1743849:425.1743849:425.1743849" />
        <prop id="wattage_off" value="9.75" />
-        <prop id="energy_mix" value="Coal:70;Hydro:20;Solar:10" />
-        <prop id="carbon_intensity" value="Coal:1000;Hydro:24;Solar:50" />
-        <prop id="water_intensity" value="Coal:1500;Hydro:100;Solar:50" />
+       <prop id="carbon_intensity" value="475" />
+       <prop id="water_intensity" value="1200" />
+       <prop id="pue" value="1.4" />
+       <prop id="wue" value="1.8" />
+       <prop id="embodied_carbon" value="320000" />
+       <prop id="embodied_water" value="2500000" />
+       <prop id="host_lifetime" value="126144000" />
    </host>
 
 
 ### How accurate are these models?
-This model is still a work in progress and may not fully reflect real-world CO₂ emissions. The accuracy of the results depends on the quality
-of the input parameters, such as the energy profile of the host and the CO₂ emission rate (carbon_intensity). Further improvements and evaluations of the model are needed.
-Keep this in mind when using this plugin.
+This model is still a work in progress and may not fully reflect real-world CO₂ emissions or water
+use. The accuracy of the results depends on the quality of the input parameters, in particular the
+host's power profile, the grid intensities, and the embodied impact estimates. Further improvements
+and evaluations of the model are needed. Keep this in mind when using this plugin.
 
 */
 
