@@ -13,7 +13,6 @@
       <prop id="wue"              value="1.8" />
       <prop id="embodied_carbon"  value="1000000" />
       <prop id="embodied_water"   value="50000" />
-      <prop id="host_lifetime"    value="157680000" /> <!--5 years -->
     </host>
 
     <host core="4" id="host_fr_static_co2" pstate="0" speed="100.0Mf">      
@@ -27,7 +26,6 @@
       <prop id="wue"              value="1.8" />
       <prop id="embodied_carbon"  value="1000000" />
       <prop id="embodied_water"   value="50000" />
-      <prop id="host_lifetime"    value="157680000" />
     </host>
 
     <host core="4" id="host_usa_static_co2" pstate="0" speed="100.0Mf">      
@@ -41,7 +39,6 @@
       <prop id="wue"              value="1.8" />
       <prop id="embodied_carbon"  value="1000000" />
       <prop id="embodied_water"   value="50000" />
-      <prop id="host_lifetime"    value="157680000" />
     </host>
 
     <!-- <host core="4" id="host_br_dynamic_co2" pstate="0" speed="100.0Mf">

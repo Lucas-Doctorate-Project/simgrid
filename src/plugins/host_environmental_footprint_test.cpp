@@ -231,83 +231,85 @@ TEST_CASE("plugins::host_environmental_footprint: WUE impact and dynamic update"
 }
 
 // ============================================================
-// 6. Embodied footprint amortization
+// 6. Fixed embodied footprint
 // ============================================================
 
-TEST_CASE("plugins::host_environmental_footprint: Embodied footprint amortization", "[plugin][environmental_footprint]")
+TEST_CASE("plugins::host_environmental_footprint: Embodied footprint is fixed host inventory", "[plugin][environmental_footprint]")
 {
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* root = e.get_netzone_root();
-  auto* zone = root->add_netzone_full("test_zone"); 
+  auto* zone = root->add_netzone_full("test_zone");
   auto* host = zone->add_host("host_embodied", 1e9);
-  
+
   host->set_property("wattage_per_state", "100.0:100.0:100.0");
-  host->set_property("embodied_carbon", "7200.0"); // 7200g
-  host->set_property("host_lifetime", "3600.0");   // 1 hour of useful life
+  host->set_property("wattage_off", "10.0");
+  host->set_property("embodied_carbon", "7200.0");
+  host->set_property("embodied_water", "360.0");
   host->seal();
   zone->seal();
   e.seal_platform();
-  
-  sg_host_set_carbon_intensity(host, 0.0); // No operational carbon, only embodied
-  
-  host->add_actor("worker", []() {
-    simgrid::s4u::this_actor::sleep_for(10.0);
-  });
-  e.run();
-  
-  // Fraction of life used: 10s / 3600s
-  // Expected carbon = (10/3600) * 7200 = 20.0 g
-  REQUIRE(sg_host_get_carbon_footprint(host) == Approx(20.0).margin(0.000001));
-}
 
-// ============================================================
-// 6b. Operational footprint without embodied
-// ============================================================
- 
-TEST_CASE("plugins::host_environmental_footprint: No embodied when lifetime not set", "[plugin][environmental_footprint]")
-{
-  sg_host_environmental_footprint_plugin_init();
-  simgrid::s4u::Engine e("test");
-  auto* host = create_test_host(e); // host_lifetime not set → defaults to 0
-  e.seal_platform();
- 
-  sg_host_set_carbon_intensity(host, 1000.0);
-  sg_host_set_pue(host, 1.0);
- 
+  REQUIRE(sg_host_get_carbon_embodied_footprint(host) == 7200.0);
+  REQUIRE(sg_host_get_water_embodied_footprint(host) == 360.0);
+  REQUIRE(sg_host_get_carbon_footprint(host) == 0.0);
+  REQUIRE(sg_host_get_water_footprint(host) == 0.0);
+
   host->add_actor("worker", []() {
     simgrid::s4u::this_actor::execute(1e9);
+    simgrid::s4u::this_actor::sleep_for(1.0);
+  });
+  host->add_actor("controller", [host]() {
+    simgrid::s4u::this_actor::sleep_for(3.0);
+    host->turn_off();
   });
   e.run();
- 
-  // With host_lifetime = 0, the ternary in update() yields 0 for lifetime_fraction.
-  // Therefore the embodied term is zero and the result must equal the pure
-  // operational footprint: 1/36000 * 1000 * 1.0 ≈ 0.027778 g.
-  REQUIRE(sg_host_get_carbon_footprint(host) == Approx(0.027778).margin(0.000001));
+
+  REQUIRE(sg_host_get_carbon_embodied_footprint(host) == 7200.0);
+  REQUIRE(sg_host_get_water_embodied_footprint(host) == 360.0);
+  REQUIRE(sg_host_get_carbon_footprint(host) == 0.0);
+  REQUIRE(sg_host_get_water_footprint(host) == 0.0);
 }
- 
-// ============================================================
-// 6c. host_lifetime = 0 must not cause division by zero
-// ============================================================
- 
-TEST_CASE("plugins::host_environmental_footprint: host_lifetime=0 does not divide by zero", "[plugin][environmental_footprint]")
+
+TEST_CASE("plugins::host_environmental_footprint: Embodied footprint setters replace fixed values", "[plugin][environmental_footprint]")
 {
   sg_host_environmental_footprint_plugin_init();
   simgrid::s4u::Engine e("test");
   auto* host = create_test_host(e);
   e.seal_platform();
- 
-  // Explicitly confirm zero lifetime produces zero embodied (no crash)
-  sg_host_set_carbon_intensity(host, 0.0);
-  sg_host_set_water_intensity(host, 0.0);
- 
-  host->add_actor("worker", []() {
+
+  sg_host_set_carbon_intensity(host, 1000.0);
+  sg_host_set_pue(host, 1.0);
+  sg_host_set_carbon_embodied_footprint(host, 100.0);
+  sg_host_set_water_embodied_footprint(host, 10.0);
+
+  REQUIRE(sg_host_get_carbon_embodied_footprint(host) == 100.0);
+  REQUIRE(sg_host_get_water_embodied_footprint(host) == 10.0);
+
+  double operational_mid = 0.0;
+
+  host->add_actor("worker", [&]() {
+    simgrid::s4u::this_actor::execute(1e9);
+    operational_mid = sg_host_get_carbon_operational_footprint(host);
+
+    sg_host_set_carbon_embodied_footprint(host, 250.0);
+    sg_host_set_water_embodied_footprint(host, 25.0);
+    sg_host_set_carbon_embodied_footprint(host, 300.0);
+    sg_host_set_water_embodied_footprint(host, 30.0);
+
+    REQUIRE(sg_host_get_carbon_footprint(host) == Approx(operational_mid).margin(0.000001));
+    REQUIRE(sg_host_get_water_footprint(host) == 0.0);
+
     simgrid::s4u::this_actor::execute(1e9);
   });
- 
-  REQUIRE_NOTHROW(e.run());
-  REQUIRE(sg_host_get_carbon_footprint(host) == 0.0);
-  REQUIRE(sg_host_get_water_footprint(host)  == 0.0);
+  e.run();
+
+  REQUIRE(operational_mid == Approx(0.027778).margin(0.000001));
+  REQUIRE(sg_host_get_carbon_footprint(host) == Approx(0.055556).margin(0.000001));
+  REQUIRE(sg_host_get_carbon_operational_footprint(host) == Approx(0.055556).margin(0.000001));
+  REQUIRE(sg_host_get_water_footprint(host) == 0.0);
+  REQUIRE(sg_host_get_carbon_embodied_footprint(host) == 300.0);
+  REQUIRE(sg_host_get_water_embodied_footprint(host) == 30.0);
 }
 
 // ============================================================

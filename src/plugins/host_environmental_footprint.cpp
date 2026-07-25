@@ -27,58 +27,62 @@ SIMGRID_REGISTER_PLUGIN(host_environmental_footprint, "Host environmental footpr
 
 /** @addtogroup plugin_environmental_footprint
 
-This is the environmental footprint plugin. It tracks the carbon emissions and water consumption
-attributable to each SimGrid host over the course of a simulation.
+This is the environmental footprint plugin. It tracks the operational carbon emissions and water
+consumption attributable to each SimGrid host over the course of a simulation. It also stores the
+fixed embodied carbon and water footprints of the host.
 
-The plugin decomposes the footprint into five distinct contributions that are accumulated
-incrementally each simulation step and exposed both individually and as combined totals:
+The plugin exposes five distinct contributions:
 
 - **Operational carbon** (\f$F^{\text{C}}_{\text{op}}\f$): off-site CO₂ from generating the grid
-  electricity drawn by the host and its supporting datacenter infrastructure.
+  electricity drawn by the host and its supporting datacenter infrastructure, accumulated
+  incrementally during the simulation.
 - **Embodied carbon** (\f$F^{\text{C}}_{\text{emb}}\f$): CO₂ emitted during host manufacturing,
-  amortized over the host's expected lifetime.
+  stored as a fixed host inventory value.
 - **On-site water** (\f$F^{\text{W}}_{\text{on}}\f$): water consumed locally for cooling.
 - **Off-site water** (\f$F^{\text{W}}_{\text{off}}\f$): water consumed off-site to generate the
   electricity used by the host (e.g. for thermoelectric cooling or hydropower evaporation).
 - **Embodied water** (\f$F^{\text{W}}_{\text{emb}}\f$): water consumed during host manufacturing,
-  amortized over the host's expected lifetime.
+  stored as a fixed host inventory value.
 
 Let \f$E\f$ be the IT energy consumed by the host during a time step \f$\Delta t\f$ (in kWh, tracked
 by the energy plugin), \f$\text{PUE}\f$ the datacenter Power Usage Effectiveness, \f$\text{WUE}\f$
 the Water Usage Effectiveness (L/kWh of IT energy), \f$I^{\text{C}}\f$ and \f$I^{\text{W}}\f$ the
-carbon and water intensities of the grid (g CO₂/kWh and L/kWh respectively), \f$C_{\text{emb}}\f$
-and \f$W_{\text{emb}}\f$ the embodied carbon (g CO₂) and water (L) of the host, and \f$L\f$ its
-expected lifetime (in seconds). Each step contributes:
+carbon and water intensities of the grid (g CO₂/kWh and L/kWh respectively). Each step contributes:
 
 \f[
 \begin{aligned}
-\Delta F^{\text{C}}_{\text{op}}  &= E \cdot \text{PUE} \cdot I^{\text{C}}      & \quad
-\Delta F^{\text{C}}_{\text{emb}} &= C_{\text{emb}} \cdot \frac{\Delta t}{L} \\
-\Delta F^{\text{W}}_{\text{on}}  &= E \cdot \text{WUE}                          & \quad
-\Delta F^{\text{W}}_{\text{off}} &= E \cdot \text{PUE} \cdot I^{\text{W}}       \\
-\Delta F^{\text{W}}_{\text{emb}} &= W_{\text{emb}} \cdot \frac{\Delta t}{L}
+\Delta F^{\text{C}}_{\text{op}}  &= E \cdot \text{PUE} \cdot I^{\text{C}} \\
+\Delta F^{\text{W}}_{\text{on}}  &= E \cdot \text{WUE} \\
+\Delta F^{\text{W}}_{\text{off}} &= E \cdot \text{PUE} \cdot I^{\text{W}}
 \end{aligned}
 \f]
 
-The combined totals are simply the sums of their components:
+The general carbon and water footprint getters report operational impacts only:
 
 \f[
-F^{\text{C}}_{\text{total}} = F^{\text{C}}_{\text{op}} + F^{\text{C}}_{\text{emb}}, \qquad
-F^{\text{W}}_{\text{total}} = F^{\text{W}}_{\text{on}} + F^{\text{W}}_{\text{off}} + F^{\text{W}}_{\text{emb}}
+F^{\text{C}}_{\text{total}} = F^{\text{C}}_{\text{op}}, \qquad
+F^{\text{W}}_{\text{total}} = F^{\text{W}}_{\text{on}} + F^{\text{W}}_{\text{off}}
 \f]
+
+The fixed embodied values are kept separate so callers can apply an allocation policy appropriate
+to their own accounting boundary.
 
 To activate this plugin, call :cpp:func:`sg_host_environmental_footprint_plugin_init()` before
 loading your platform. The footprints are then updated automatically whenever the host changes
 state, changes speed, or one of the getters is queried.
 
 Use :cpp:func:`sg_host_get_carbon_footprint()` and :cpp:func:`sg_host_get_water_footprint()` to
-retrieve the combined totals, or one of the per-component getters for the breakdown:
+retrieve the operational totals, or one of the per-component getters for the breakdown:
 
 - :cpp:func:`sg_host_get_carbon_operational_footprint()`
 - :cpp:func:`sg_host_get_carbon_embodied_footprint()`
 - :cpp:func:`sg_host_get_water_onsite_footprint()`
 - :cpp:func:`sg_host_get_water_offsite_footprint()`
 - :cpp:func:`sg_host_get_water_embodied_footprint()`
+
+The fixed embodied values can be replaced at runtime via
+:cpp:func:`sg_host_set_carbon_embodied_footprint()` and
+:cpp:func:`sg_host_set_water_embodied_footprint()`.
 
 Carbon and water intensities, PUE and WUE can be inspected and overridden at runtime via
 :cpp:func:`sg_host_get_carbon_intensity()` / :cpp:func:`sg_host_set_carbon_intensity()` and the
@@ -94,8 +98,6 @@ neutral values that disable the corresponding contribution):
   - ``wue`` — Water Usage Effectiveness in L/kWh of IT energy (defaults to 0.0).
   - ``embodied_carbon`` — total g CO₂ embodied in the host's manufacturing.
   - ``embodied_water`` — total L of water embodied in the host's manufacturing.
-  - ``host_lifetime`` — expected useful life of the host in seconds, used to amortize embodied
-    impacts. If left at 0, no embodied contribution is accumulated.
 
 Carbon and water intensities are expected to be pre-aggregated over the energy mix of the host's
 grid. A simple weighted average works well, where given \f$N\f$ sources with intensities \f$I_j\f$
@@ -118,7 +120,6 @@ Here is an example of XML declaration:
        <prop id="wue" value="1.8" />
        <prop id="embodied_carbon" value="320000" />
        <prop id="embodied_water" value="2500000" />
-       <prop id="host_lifetime" value="126144000" />
    </host>
 
 
@@ -148,9 +149,11 @@ public:
   double get_host_water_footprint();
   double get_carbon_operational();
   double get_carbon_embodied();
+  void set_carbon_embodied(double value);
   double get_water_onsite();
   double get_water_offsite();
   double get_water_embodied();
+  void set_water_embodied(double value);
   double get_host_carbon_intensity();
   void set_carbon_intensity(double new_intensity);
   double get_host_water_intensity();
@@ -169,18 +172,14 @@ private:
   double pue_ = 1.0;           // Power Usage Effectiveness (default: ideal)
   double wue_ = 0.0;           // Water Usage Effectiveness (L/kWh) - on-site cooling
 
-  double embodied_carbon_ = 0.0;  // total gCO2 embodied in host production 
-  double embodied_water_  = 0.0;  // total L embodied in host production
-  double host_lifetime_seconds_  = 0.0;  // Expected useful life of the host (seconds)
-
-  double total_carbon_footprint_ = 0.0; /* Total CO2 emitted to produce the energy used by the host */
-  double total_water_footprint_ = 0.0; /* Total water used to produce the energy used by the host */
+  double total_carbon_footprint_ = 0.0; /* Operational CO2 emitted to produce the energy used by the host */
+  double total_water_footprint_ = 0.0; /* Operational water used by the host and its energy supply */
 
   double carbon_operational_ = 0.0; /* Off-site CO2 from grid electricity */
-  double carbon_embodied_    = 0.0; /* Amortized embodied CO2 from host manufacturing */
+  double carbon_embodied_    = 0.0; /* Fixed embodied CO2 from host manufacturing */
   double water_onsite_       = 0.0; /* On-site cooling water */
   double water_offsite_      = 0.0; /* Off-site water for grid electricity generation */
-  double water_embodied_     = 0.0; /* Amortized embodied water from host manufacturing */
+  double water_embodied_     = 0.0; /* Fixed embodied water from host manufacturing */
   
   double carbon_intensity_ = 0.0; /* Current weighted carbon intensity of the energy mix (g CO2/kWh) */
   double water_intensity_ = 0.0; /* Current weighted water intensity of the energy mix (L/kWh) */
@@ -206,17 +205,13 @@ void HostEnvironmentalFootprint::update()
   double computation_energy_this_step_kwh = energy_this_step / 3.6e6;
   double total_datacenter_energy_this_step_kwh = computation_energy_this_step_kwh * this->pue_;
 
-  double lifetime_fraction_this_step = (this->host_lifetime_seconds_ > 0.0) ? (deltaT / this->host_lifetime_seconds_) : 0.0;
-
   this->carbon_operational_ += total_datacenter_energy_this_step_kwh * this->carbon_intensity_;
-  this->carbon_embodied_    += this->embodied_carbon_ * lifetime_fraction_this_step;
 
   this->water_onsite_   += computation_energy_this_step_kwh * this->wue_;
   this->water_offsite_  += total_datacenter_energy_this_step_kwh * this->water_intensity_;
-  this->water_embodied_ += this->embodied_water_ * lifetime_fraction_this_step;
 
-  this->total_carbon_footprint_ = this->carbon_operational_ + this->carbon_embodied_;
-  this->total_water_footprint_  = this->water_onsite_ + this->water_offsite_ + this->water_embodied_;
+  this->total_carbon_footprint_ = this->carbon_operational_;
+  this->total_water_footprint_  = this->water_onsite_ + this->water_offsite_;
 
   this->last_updated_ = finish_time;
 
@@ -246,15 +241,11 @@ HostEnvironmentalFootprint::HostEnvironmentalFootprint(simgrid::s4u::Host* ptr) 
 
   const char* raw_emb_carbon = host_->get_property("embodied_carbon");
   if (raw_emb_carbon != nullptr)
-    this->embodied_carbon_ = std::stod(raw_emb_carbon);
+    this->carbon_embodied_ = std::stod(raw_emb_carbon);
 
   const char* raw_emb_water = host_->get_property("embodied_water");
   if (raw_emb_water != nullptr)
-    this->embodied_water_ = std::stod(raw_emb_water);
-
-  const char* raw_lifetime = host_->get_property("host_lifetime");
-  if (raw_lifetime != nullptr)
-    this->host_lifetime_seconds_ = std::stod(raw_lifetime);
+    this->water_embodied_ = std::stod(raw_emb_water);
 
   XBT_DEBUG("Creating HostEnvironmentalFootprint for host %s with the following energy mix configuration: \nCarbon intensity: %.2f gCO2/kWh; Water intensity: %.2f L/kWh.",
             host_->get_cname(), this->carbon_intensity_, this->water_intensity_);
@@ -280,8 +271,12 @@ double HostEnvironmentalFootprint::get_carbon_operational()
 
 double HostEnvironmentalFootprint::get_carbon_embodied()
 {
-  this->ensure_up_to_date();
   return this->carbon_embodied_;
+}
+
+void HostEnvironmentalFootprint::set_carbon_embodied(double value)
+{
+  this->carbon_embodied_ = value;
 }
 
 double HostEnvironmentalFootprint::get_water_onsite()
@@ -298,8 +293,12 @@ double HostEnvironmentalFootprint::get_water_offsite()
 
 double HostEnvironmentalFootprint::get_water_embodied()
 {
-  this->ensure_up_to_date();
   return this->water_embodied_;
+}
+
+void HostEnvironmentalFootprint::set_water_embodied(double value)
+{
+  this->water_embodied_ = value;
 }
 
 double HostEnvironmentalFootprint::get_host_carbon_intensity()
@@ -418,9 +417,9 @@ static void on_simulation_end()
 /* **************************** Public interface *************************** */
 
 
-/** \ingroup plugin_carbon_footprint
- * \brief Enable host carbon footprint plugin
- * \details Enable carbon footprint plugin to get the carbon footprint of each cpu. 
+/** \ingroup plugin_environmental_footprint
+ * \brief Enable the host environmental footprint plugin
+ * \details Enable the environmental footprint plugin to get the operational and embodied footprint of each host.
  */
 void sg_host_environmental_footprint_plugin_init()
 {
@@ -444,8 +443,8 @@ static void ensure_plugin_inited()
                                             "before calling any function related to that plugin.");
 }
 
-/** @ingroup plugin_carbon_footprint
- *  @brief Returns the total carbon footprint by the host so far (in g/kwh)
+/** @ingroup plugin_environmental_footprint
+ *  @brief Returns the operational carbon footprint of the host so far (in g CO2eq)
  *
  *  Please note that since the carbon footprint is lazily updated, it may require a simcall to update it.
  *  The result is that the actor requesting this value will be interrupted,
@@ -464,16 +463,31 @@ double sg_host_get_water_footprint(const_sg_host_t host)
   return host->extension<HostEnvironmentalFootprint>()->get_host_water_footprint();
 }
 
+/** @ingroup plugin_environmental_footprint
+ *  @brief Returns the operational carbon footprint of the host so far (in g CO2eq)
+ */
 double sg_host_get_carbon_operational_footprint(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostEnvironmentalFootprint>()->get_carbon_operational();
 }
 
+/** @ingroup plugin_environmental_footprint
+ *  @brief Returns the fixed embodied carbon footprint of the host (in g CO2eq)
+ */
 double sg_host_get_carbon_embodied_footprint(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostEnvironmentalFootprint>()->get_carbon_embodied();
+}
+
+/** @ingroup plugin_environmental_footprint
+ *  @brief Replaces the fixed embodied carbon footprint of the host (in g CO2eq)
+ */
+void sg_host_set_carbon_embodied_footprint(const_sg_host_t host, double value)
+{
+  ensure_plugin_inited();
+  host->extension<HostEnvironmentalFootprint>()->set_carbon_embodied(value);
 }
 
 double sg_host_get_water_onsite_footprint(const_sg_host_t host)
@@ -488,10 +502,22 @@ double sg_host_get_water_offsite_footprint(const_sg_host_t host)
   return host->extension<HostEnvironmentalFootprint>()->get_water_offsite();
 }
 
+/** @ingroup plugin_environmental_footprint
+ *  @brief Returns the fixed embodied water footprint of the host (in L)
+ */
 double sg_host_get_water_embodied_footprint(const_sg_host_t host)
 {
   ensure_plugin_inited();
   return host->extension<HostEnvironmentalFootprint>()->get_water_embodied();
+}
+
+/** @ingroup plugin_environmental_footprint
+ *  @brief Replaces the fixed embodied water footprint of the host (in L)
+ */
+void sg_host_set_water_embodied_footprint(const_sg_host_t host, double value)
+{
+  ensure_plugin_inited();
+  host->extension<HostEnvironmentalFootprint>()->set_water_embodied(value);
 }
 
 double sg_host_get_carbon_intensity(const_sg_host_t host)
